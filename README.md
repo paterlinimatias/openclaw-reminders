@@ -1,10 +1,8 @@
 # openclaw-reminders
 
-Durable reminders for OpenClaw.
+openclaw-reminders gives OpenClaw agents a reminder system that survives restarts.
 
 ## What it does
-`openclaw-reminders` gives OpenClaw agents a reminder system that survives restarts.
-
 It lets agents:
 - create reminders on a specific date or in xx minutes, hours, or days from now
 - list reminders
