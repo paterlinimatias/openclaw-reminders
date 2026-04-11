@@ -1,0 +1,36 @@
+{
+  "name": "openclaw-reminders",
+  "version": "0.2.0",
+  "description": "SQLite-backed reminders and scheduled task runner for OpenClaw",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "openclaw-reminders": "bin/openclaw-reminders"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "README.md",
+    "LICENSE",
+    "data/schema.sql",
+    "scripts/create-skill-scaffold.sh",
+    "install_cron.sh"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0"
+  },
+  "keywords": [
+    "openclaw",
+    "reminders",
+    "scheduler",
+    "sqlite",
+    "cron"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
