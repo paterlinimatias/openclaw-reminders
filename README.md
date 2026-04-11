@@ -8,7 +8,6 @@ Durable reminders for OpenClaw.
 It lets agents:
 - create reminders on a specific date or in xx minutes, hours, or days from now
 - list reminders
-- inspect reminders
 - reschedule reminders
 - change reminder text
 - remove reminders
