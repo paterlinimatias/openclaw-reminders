@@ -19,12 +19,6 @@ npm install -g openclaw-reminders
 openclaw-reminders setup
 ```
 
-Setup will:
-- find or ask for your OpenClaw workspace
-- create the reminder database
-- install the runner cron job
-- install the bundled OpenClaw skill
-
 If OpenClaw does not pick up the new skill immediately, restart the gateway:
 ```bash
 openclaw gateway restart
@@ -46,6 +40,13 @@ You can also ask agents to manipulate reminders:
 - “Move that reminder to 3 PM”
 - “Change that reminder to tomorrow morning”
 - “Delete that reminder”
+
+## How this works
+Setup will:
+- find or ask for your OpenClaw workspace
+- create the reminder database
+- install the runner cron job
+- install the bundled OpenClaw skill
 
 ## More docs
 - [CLI reference](docs/cli.md)
