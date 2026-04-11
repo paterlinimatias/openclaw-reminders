@@ -22,18 +22,12 @@ openclaw gateway restart
 ```
 
 ## Use
-After setup, talk to your agents naturally.
-
-Real examples:
+After setup, talk to your agents naturally:
 - “Remind me to take a break in 20 minutes”
 - “Try doing XXXX again in 5 minutes”
 - “Scrape the xxxx site again in two hours”
 - “Remind CTO agent in 2 hours to review all pending PRs”
-
-## Manage reminders
-You can also ask agents to manipulate reminders:
 - “List my reminders”
-- “Show me that reminder”
 - “Move that reminder to 3 PM”
 - “Change that reminder to tomorrow morning”
 - “Delete that reminder”
