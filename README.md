@@ -24,7 +24,7 @@ If OpenClaw does not pick up the new skill immediately, restart the gateway:
 openclaw gateway restart
 ```
 
-## How this works
+## What setup does
 Setup will:
 - find or ask for your OpenClaw workspace
 - create the reminder database
