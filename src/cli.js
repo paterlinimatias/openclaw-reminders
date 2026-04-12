@@ -183,7 +183,7 @@ function installRunner(options = {}) {
   const args = [
     'cron', 'add',
     '--agent', options.agent || 'cto',
-    '--session', 'main',
+    '--session', 'isolated',
     '--every', '1m',
     '--name', 'openclaw-reminders-runner',
     '--description', `Run due reminders for ${workspace}`,
