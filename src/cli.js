@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { DatabaseSync as Database } from 'node:sqlite';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -199,6 +199,98 @@ function installRunner(options = {}) {
   return JSON.parse(result.stdout.trim());
 }
 
+function listCronJobs() {
+  const result = spawnSync('openclaw', ['cron', 'list', '--json'], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || 'failed to list OpenClaw cron jobs').trim());
+  }
+  const parsed = JSON.parse(result.stdout.trim());
+  return parsed.jobs || [];
+}
+
+function removeCronJob(id) {
+  const result = spawnSync('openclaw', ['cron', 'remove', id, '--json'], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || `failed to remove cron job ${id}`).trim());
+  }
+  return JSON.parse(result.stdout.trim());
+}
+
+function findReminderRunnerJobs() {
+  return listCronJobs().filter((job) => job.name === 'openclaw-reminders-runner');
+}
+
+async function confirm(message) {
+  const answer = await prompt(`${message} [y/N]: `);
+  return ['y', 'yes'].includes(answer.toLowerCase());
+}
+
+function removeSkill(options = {}) {
+  const workspace = getWorkspace(options);
+  const skillDir = join(workspace, 'skills', 'openclaw-reminders');
+  if (existsSync(skillDir)) {
+    rmSync(skillDir, { recursive: true, force: true });
+  }
+  return { skill_dir: skillDir, removed: true };
+}
+
+function removeDbAndAppDir(options = {}) {
+  const dbPath = getDbPath(options);
+  const appDir = dirname(dbPath);
+  if (existsSync(appDir)) {
+    rmSync(appDir, { recursive: true, force: true });
+  }
+  return { app_dir: appDir, removed: true };
+}
+
+function removeConfig() {
+  if (existsSync(CONFIG_PATH)) {
+    unlinkSync(CONFIG_PATH);
+  }
+  return { config_path: CONFIG_PATH, removed: true };
+}
+
+async function uninstall(options) {
+  ensureOpenClawInstalled();
+  const workspace = getWorkspace(options);
+  const summary = {
+    workspace,
+    cron_jobs_removed: [],
+    skill_removed: null,
+    db_removed: null,
+    config_removed: null,
+  };
+
+  if (!(await confirm('Remove the OpenClaw cron runner and installed skill?'))) {
+    throw new Error('uninstall cancelled');
+  }
+
+  for (const job of findReminderRunnerJobs()) {
+    removeCronJob(job.id);
+    summary.cron_jobs_removed.push(job.id);
+  }
+  summary.skill_removed = removeSkill({ workspace });
+
+  if (await confirm('Also delete the reminders database for this workspace?')) {
+    summary.db_removed = removeDbAndAppDir({ workspace });
+  }
+
+  if (await confirm('Also delete the openclaw-reminders config file?')) {
+    summary.config_removed = removeConfig();
+  }
+
+  console.log(JSON.stringify({ ok: true, uninstall: summary }));
+  process.stderr.write(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧹  openclaw-reminders cleanup complete.
+
+If you also want to remove the npm package itself, run:
+
+       npm uninstall -g openclaw-reminders
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+}
+
 function runShell(payload) {
   const result = spawnSync(payload, { shell: true, stdio: 'inherit' });
   if (result.status !== 0) {
@@ -395,7 +487,8 @@ Advanced commands:
   remove --id <id>
   run-due
   install-runner
-  install-skill`);
+  install-skill
+  uninstall`);
 }
 
 async function main() {
@@ -416,6 +509,10 @@ async function main() {
   if (command === 'install-skill') {
     const skill = installSkill(options);
     console.log(JSON.stringify({ ok: true, skill }));
+    return;
+  }
+  if (command === 'uninstall') {
+    await uninstall(options);
     return;
   }
   if (command === 'add' || command === 'remind') {
