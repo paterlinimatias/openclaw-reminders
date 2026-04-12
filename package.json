@@ -1,6 +1,6 @@
 {
   "name": "openclaw-reminders",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "SQLite-backed reminders and scheduled task runner for OpenClaw",
   "license": "MIT",
   "type": "module",

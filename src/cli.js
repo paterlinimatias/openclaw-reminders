@@ -278,7 +278,16 @@ async function uninstall(options) {
   };
 
   try {
-    if (!(await confirm('Remove the OpenClaw cron runner and installed skill?'))) {
+    const proceed = await confirm([
+      'This will remove:',
+      '- the OpenClaw cron runner',
+      '- the installed skill',
+      '- the reminders database',
+      '- the openclaw-reminders config file',
+      '',
+      'Proceed?'
+    ].join('\n'));
+    if (!proceed) {
       throw new Error('uninstall cancelled');
     }
 
@@ -287,14 +296,8 @@ async function uninstall(options) {
       summary.cron_jobs_removed.push(job.id);
     }
     summary.skill_removed = removeSkill({ workspace });
-
-    if (await confirm('Also delete the reminders database for this workspace?')) {
-      summary.db_removed = removeDbAndAppDir({ workspace });
-    }
-
-    if (await confirm('Also delete the openclaw-reminders config file?')) {
-      summary.config_removed = removeConfig();
-    }
+    summary.db_removed = removeDbAndAppDir({ workspace });
+    summary.config_removed = removeConfig();
   } finally {
     closeReadline();
   }
@@ -303,6 +306,12 @@ async function uninstall(options) {
   process.stderr.write(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹  openclaw-reminders cleanup complete.
+
+Removed:
+- OpenClaw cron runner
+- installed skill
+- reminders database
+- openclaw-reminders config file
 
 If you also want to remove the npm package itself, run:
 
