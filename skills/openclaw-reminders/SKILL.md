@@ -46,3 +46,23 @@ openclaw-reminders run-due
 - Use natural language with the user, but execute exact CLI commands.
 - Use `list` before modifying or deleting if the reminder id is unclear.
 - After updating or removing a reminder, confirm the result clearly.
+- When a reminder is created from a user conversation, preserve the original delivery context whenever possible.
+- When the reminder fires, notify the user in the same chat/channel where the reminder request was originally made.
+- Use stable routing context such as channel/account/chat identity, not a fragile session key that may change after `/new`.
+- The reminder message should clearly say either:
+  - what the user asked to be reminded about, or
+  - that the previously scheduled reminder is now being executed.
+- Do not silently reroute reminder notifications to a different channel unless the user explicitly asked for that.
+- The minimum reminder time unit is **one minute**.
+- Accept examples like:
+  - in 1 minute
+  - in 20 minutes
+  - on a specific date at a specific hour
+- Do **not** create reminders for sub-minute timing such as:
+  - in 10 seconds
+  - in 30 seconds
+- Do **not** keep fractional minute precision such as:
+  - in 1.5 minutes
+  - in 2.7 minutes
+- When the user gives a fractional number of minutes, round **down** to the nearest whole minute before scheduling.
+- This rule exists because the reminder runner executes once per minute, so reminder scheduling should match that cadence.

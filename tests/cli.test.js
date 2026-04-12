@@ -20,7 +20,7 @@ function runCli({ dbPath, workspace, home, args }) {
   });
 }
 
-test('add and list reminders with agent metadata', () => {
+test('add and list reminders with stable delivery metadata', () => {
   const dir = mkdtempSync(join(tmpdir(), 'openclaw-reminders-'));
   const workspace = join(dir, 'workspace');
   mkdirSync(workspace, { recursive: true });
@@ -30,7 +30,7 @@ test('add and list reminders with agent metadata', () => {
     dbPath,
     workspace,
     home: dir,
-    args: ['add', '--in', '+10m', '--agent', 'cto', '--message', 'Check deploy'],
+    args: ['add', '--in', '+10m', '--agent', 'cto', '--channel', 'telegram', '--account', 'cto', '--to', '8020357623', '--message', 'Check deploy'],
   });
   assert.equal(add.status, 0);
   const created = JSON.parse(add.stdout.trim());
@@ -45,6 +45,11 @@ test('add and list reminders with agent metadata', () => {
   assert.equal(row.creator_agent_id, 'cto');
   assert.equal(row.target_agent_id, 'cto');
   assert.equal(row.kind, 'openclaw_message');
+  const payload = JSON.parse(row.payload);
+  assert.equal(payload.channel, 'telegram');
+  assert.equal(payload.account, 'cto');
+  assert.equal(payload.to, '8020357623');
+  assert.equal(payload.at, '+1m');
 });
 
 test('show, update, and remove a reminder', () => {
@@ -115,7 +120,7 @@ test('run-due marks due shell reminder done', () => {
     dbPath,
     workspace,
     home: dir,
-    args: ['add', '--at', '2020-01-01T00:00:00Z', '--agent', 'cto', '--kind', 'shell', '--payload', 'true'],
+    args: ['add', '--at', '2020-01-01T00:00:45Z', '--agent', 'cto', '--kind', 'shell', '--payload', 'true'],
   });
   assert.equal(add.status, 0);
 
@@ -124,4 +129,20 @@ test('run-due marks due shell reminder done', () => {
   const line = JSON.parse(run.stdout.trim());
   assert.equal(line.status, 'done');
   assert.equal(existsSync(dbPath), true);
+});
+
+test('rejects sub-minute relative times', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'openclaw-reminders-'));
+  const workspace = join(dir, 'workspace');
+  mkdirSync(workspace, { recursive: true });
+  const dbPath = join(workspace, '.openclaw-reminders', 'reminders.db');
+
+  const add = runCli({
+    dbPath,
+    workspace,
+    home: dir,
+    args: ['add', '--in', '+10s', '--agent', 'cto', '--message', 'Too fast'],
+  });
+  assert.notEqual(add.status, 0);
+  assert.match(add.stderr, /sub-minute relative time is not supported/);
 });

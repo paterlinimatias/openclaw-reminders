@@ -29,6 +29,12 @@ function parseTime(value) {
   return parsed.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+function floorToMinute(date) {
+  const next = new Date(date);
+  next.setUTCSeconds(0, 0);
+  return next;
+}
+
 function parseDuration(value) {
   const match = /^\+(\d+)(s|m|h|d)$/.exec(value.trim());
   if (!match) {
@@ -36,14 +42,17 @@ function parseDuration(value) {
   }
   const amount = Number(match[1]);
   const unit = match[2];
-  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-  return new Date(Date.now() + amount * multipliers[unit]).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  if (unit === 's') {
+    throw new Error(`sub-minute relative time is not supported: ${value}. Use whole minutes or larger units.`);
+  }
+  const multipliers = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return floorToMinute(new Date(Date.now() + amount * multipliers[unit])).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function resolveRunAt(options) {
-  if (options.at) return parseTime(options.at);
+  if (options.at) return floorToMinute(parseTime(options.at)).toISOString().replace(/\.\d{3}Z$/, 'Z');
   if (options.in) return parseDuration(options.in);
-  if (options['run-at']) return parseTime(options['run-at']);
+  if (options['run-at']) return floorToMinute(parseTime(options['run-at'])).toISOString().replace(/\.\d{3}Z$/, 'Z');
   throw new Error('missing time: use --at, --in, or --run-at');
 }
 
@@ -333,14 +342,15 @@ function runOpenClawMessage(payload, row) {
   const args = [
     'cron', 'add',
     '--agent', row.target_agent_id || data.agent || row.creator_agent_id,
-    '--session', data.session || 'main',
-    '--at', data.at || '+5s',
+    '--session', 'main',
+    '--at', data.at || '+1m',
     '--message', data.message,
     '--delete-after-run',
     '--json',
   ];
   if (data.channel) args.push('--channel', data.channel);
   if (data.account) args.push('--account', data.account);
+  if (data.to) args.push('--to', data.to);
   const result = spawnSync('openclaw', args, { encoding: 'utf8' });
   if (result.status !== 0) {
     throw new Error((result.stderr || result.stdout || 'openclaw cron add failed').trim());
@@ -384,9 +394,11 @@ function addReminder(options) {
   const targetAgentId = options['target-agent'] || options.agent || creatorAgentId;
   const kind = options.kind || 'openclaw_message';
   const payload = options.payload || JSON.stringify({
-    at: '+5s',
+    at: '+1m',
     agent: targetAgentId,
-    session: 'main',
+    channel: options.channel,
+    account: options.account,
+    to: options.to,
     message: options.message,
   });
   const stmt = db.prepare('INSERT INTO reminders (workspace_path, creator_agent_id, target_agent_id, run_at, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');

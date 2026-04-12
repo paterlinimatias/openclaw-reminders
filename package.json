@@ -1,6 +1,6 @@
 {
   "name": "openclaw-reminders",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "SQLite-backed reminders and scheduled task runner for OpenClaw",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "postinstall": "echo '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅  openclaw-reminders installed!\n\n👉  Now run:\n\n       openclaw-reminders setup\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'"
+    "postinstall": "echo '\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u2705  openclaw-reminders installed!\n\n\ud83d\udc49  Now run:\n\n       openclaw-reminders setup\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n'"
   },
   "keywords": [
     "openclaw",
