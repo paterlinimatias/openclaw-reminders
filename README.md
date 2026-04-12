@@ -1,36 +1,39 @@
 # openclaw-reminders
 
-openclaw-reminders gives OpenClaw agents a reminder system that survives restarts.
+`openclaw-reminders` is a small installer + CLI for cron-native reminders in OpenClaw.
 
-## How it works
-After setup, talk to your agents naturally:
-- “Remind me to take a break in 20 minutes”
-- “Try doing XXXX again in 5 minutes”
-- “Scrape the xxxx site again in two hours”
-- “Remind CTO agent in 2 hours to review all pending PRs”
-- “List my reminders”
-- “Move that reminder to 3 PM”
-- “Change that reminder to tomorrow morning”
-- “Delete that reminder”
+It does **not** run its own scheduler anymore.
+It installs the reminder skill and provides a reminder-focused CLI that stores reminders directly as native OpenClaw cron jobs.
 
 ## Install
+
 ```bash
 npm install -g openclaw-reminders
 openclaw-reminders setup
 ```
 
-If OpenClaw does not pick up the new skill immediately, restart the gateway:
+## What it does
+
+- installs the `openclaw-reminders` skill into your OpenClaw workspace
+- creates reminders as native OpenClaw one-shot cron jobs
+- lists reminder cron jobs in reminder-oriented form
+- updates reminder cron jobs
+- removes reminder cron jobs
+
+## Commands
+
 ```bash
-openclaw gateway restart
+openclaw-reminders add --in 2m --message "brush teeth" --channel telegram --account cto --to 8020357623
+openclaw-reminders list
+openclaw-reminders show --id <cron-job-id>
+openclaw-reminders update --id <cron-job-id> --in 10m --message "call bibi"
+openclaw-reminders remove --id <cron-job-id>
+openclaw-reminders uninstall
 ```
 
-## What setup does
-Setup will:
-- find or ask for your OpenClaw workspace
-- create the reminder database
-- install the runner cron job
-- install the bundled OpenClaw skill
+## Notes
 
-## More docs
-- [CLI reference](docs/cli.md)
-- [Architecture](docs/architecture.md)
+- Reminder scheduling is backed by native OpenClaw cron.
+- Minimum reminder granularity is one minute.
+- Relative reminder times use minute-or-larger values such as `2m`, `10m`, `1h`, or `1d`.
+- Delivery should preserve the original chat routing context whenever possible.

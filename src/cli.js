@@ -1,13 +1,11 @@
 #!/usr/bin/env node
-import { DatabaseSync as Database } from 'node:sqlite';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-const APP_DIR_NAME = '.openclaw-reminders';
 const CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw-reminders.json');
 const DEFAULT_WORKSPACE_CANDIDATES = [
   process.env.OPENCLAW_WORKSPACE,
@@ -16,34 +14,62 @@ const DEFAULT_WORKSPACE_CANDIDATES = [
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(CURRENT_DIR, '..');
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, 'skills', 'openclaw-reminders');
-
-function utcNow() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
+const REMINDER_NAME_PREFIX = 'openclaw-reminder:';
+const REMINDER_DESCRIPTION_PREFIX = 'Managed by openclaw-reminders';
 
 function parseTime(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`invalid time: ${value}`);
   }
-  return parsed.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return parsed;
+}
+
+function floorToMinute(date) {
+  const next = new Date(date);
+  next.setUTCSeconds(0, 0);
+  return next;
+}
+
+function toIsoMinute(date) {
+  return floorToMinute(date).toISOString();
 }
 
 function parseDuration(value) {
-  const match = /^\+(\d+)(s|m|h|d)$/.exec(value.trim());
+  const trimmed = value.trim();
+  const match = /^\+?(\d+)(s|m|h|d)$/.exec(trimmed);
   if (!match) {
     throw new Error(`invalid relative time: ${value}`);
   }
   const amount = Number(match[1]);
   const unit = match[2];
-  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-  return new Date(Date.now() + amount * multipliers[unit]).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  if (unit === 's') {
+    throw new Error(`sub-minute relative time is not supported: ${value}. Use whole minutes or larger units.`);
+  }
+  const multipliers = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return new Date(Date.now() + amount * multipliers[unit]);
 }
 
 function resolveRunAt(options) {
-  if (options.at) return parseTime(options.at);
-  if (options.in) return parseDuration(options.in);
-  if (options['run-at']) return parseTime(options['run-at']);
+  if (options.at) return toIsoMinute(parseTime(options.at));
+  if (options.in) return toIsoMinute(parseDuration(options.in));
+  if (options['run-at']) return toIsoMinute(parseTime(options['run-at']));
+  throw new Error('missing time: use --at, --in, or --run-at');
+}
+
+function toCronAtArgument(options) {
+  if (options.at) return toIsoMinute(parseTime(options.at));
+  if (options['run-at']) return toIsoMinute(parseTime(options['run-at']));
+  if (options.in) {
+    const match = /^\+?(\d+)([mhd])$/.exec(options.in.trim());
+    if (!match) {
+      if (/^\+?\d+s$/.test(options.in.trim())) {
+        throw new Error(`sub-minute relative time is not supported: ${options.in}. Use whole minutes or larger units.`);
+      }
+      throw new Error(`invalid relative time: ${options.in}`);
+    }
+    return `${match[1]}${match[2]}`;
+  }
   throw new Error('missing time: use --at, --in, or --run-at');
 }
 
@@ -82,11 +108,26 @@ function findWorkspace() {
   return null;
 }
 
+let sharedReadline = null;
+
+function getReadline() {
+  if (!sharedReadline) {
+    sharedReadline = readline.createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return sharedReadline;
+}
+
+function closeReadline() {
+  if (sharedReadline) {
+    sharedReadline.close();
+    sharedReadline = null;
+  }
+}
+
 function prompt(question) {
   return new Promise((resolvePromise) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const rl = getReadline();
     rl.question(question, (answer) => {
-      rl.close();
       resolvePromise(answer.trim());
     });
   });
@@ -110,36 +151,6 @@ function getWorkspace(options = {}) {
   const detected = findWorkspace();
   if (detected) return detected;
   throw new Error('workspace not configured. Run `openclaw-reminders setup`.');
-}
-
-function getDbPath(options = {}) {
-  if (process.env.OPENCLAW_REMINDERS_DB) return resolve(process.env.OPENCLAW_REMINDERS_DB);
-  const workspace = getWorkspace(options);
-  return join(workspace, APP_DIR_NAME, 'reminders.db');
-}
-
-function connect(options = {}) {
-  const dbPath = getDbPath(options);
-  mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reminders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      workspace_path TEXT NOT NULL,
-      creator_agent_id TEXT NOT NULL,
-      target_agent_id TEXT NOT NULL,
-      run_at TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      payload TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      attempts INTEGER NOT NULL DEFAULT 0,
-      last_error TEXT,
-      created_at TEXT NOT NULL,
-      started_at TEXT,
-      finished_at TEXT
-    )
-  `);
-  return db;
 }
 
 function ensureOpenClawInstalled() {
@@ -174,187 +185,217 @@ function installSkill(options = {}) {
   return { skill_dir: targetDir };
 }
 
-function getRunnerMessage() {
-  return 'Run openclaw-reminders run-due and report only if work was done or something failed.';
+function parseJsonOutput(text, fallbackMessage) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) throw new Error(fallbackMessage);
+  return JSON.parse(trimmed);
 }
 
-function installRunner(options = {}) {
+function runOpenClaw(args, fallbackMessage) {
+  const result = spawnSync('openclaw', args, { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || fallbackMessage).trim());
+  }
+  return result;
+}
+
+function listCronJobs() {
+  const result = runOpenClaw(['cron', 'list', '--json'], 'failed to list OpenClaw cron jobs');
+  const parsed = parseJsonOutput(result.stdout, 'failed to parse OpenClaw cron list output');
+  return parsed.jobs || [];
+}
+
+function getReminderJobs(options = {}) {
   const workspace = getWorkspace(options);
-  const args = [
-    'cron', 'add',
-    '--agent', options.agent || 'cto',
-    '--session', 'isolated',
-    '--every', '1m',
-    '--name', 'openclaw-reminders-runner',
-    '--description', `Run due reminders for ${workspace}`,
-    '--message', getRunnerMessage(),
-    '--tools', 'exec,read,write',
-    '--no-deliver',
-    '--json',
-  ];
-  const result = spawnSync('openclaw', args, { encoding: 'utf8' });
-  if (result.status !== 0) {
-    throw new Error((result.stderr || result.stdout || 'failed to install OpenClaw cron runner').trim());
-  }
-  return JSON.parse(result.stdout.trim());
+  return listCronJobs().filter((job) => {
+    const name = job.name || '';
+    const description = job.description || '';
+    return name.startsWith(REMINDER_NAME_PREFIX) && description.includes(workspace);
+  });
 }
 
-function runShell(payload) {
-  const result = spawnSync(payload, { shell: true, stdio: 'inherit' });
-  if (result.status !== 0) {
-    throw new Error(`shell command failed with code ${result.status}`);
-  }
+function removeCronJob(id) {
+  const result = runOpenClaw(['cron', 'rm', id, '--json'], `failed to remove cron job ${id}`);
+  return parseJsonOutput(result.stdout, `failed to parse cron remove output for ${id}`);
 }
 
-function runOpenClawMessage(payload, row) {
-  const data = JSON.parse(payload);
-  const args = [
-    'cron', 'add',
-    '--agent', row.target_agent_id || data.agent || row.creator_agent_id,
-    '--session', data.session || 'main',
-    '--at', data.at || '+5s',
-    '--message', data.message,
-    '--delete-after-run',
-    '--json',
-  ];
-  if (data.channel) args.push('--channel', data.channel);
-  if (data.account) args.push('--account', data.account);
-  const result = spawnSync('openclaw', args, { encoding: 'utf8' });
-  if (result.status !== 0) {
-    throw new Error((result.stderr || result.stdout || 'openclaw cron add failed').trim());
-  }
+function buildReminderName(text) {
+  return `${REMINDER_NAME_PREFIX}${text}`;
 }
 
-function normalizeId(value) {
-  const id = Number(value);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error(`invalid reminder id: ${value}`);
-  }
-  return id;
+function buildReminderDescription(workspace) {
+  return `${REMINDER_DESCRIPTION_PREFIX} for ${workspace}`;
 }
 
-function getReminderOrThrow(db, workspace, id) {
-  const row = db.prepare('SELECT * FROM reminders WHERE workspace_path = ? AND id = ?').get(workspace, id);
-  if (!row) {
+function formatReminderRow(job) {
+  return {
+    id: job.id,
+    text: job.payload?.message || '',
+    run_at: job.schedule?.at || null,
+    channel: job.delivery?.channel || null,
+    account: job.delivery?.accountId || null,
+    to: job.delivery?.to || null,
+    name: job.name,
+    description: job.description,
+  };
+}
+
+function findReminderJobOrThrow(id, options = {}) {
+  const job = getReminderJobs(options).find((entry) => entry.id === id);
+  if (!job) {
     throw new Error(`reminder not found: ${id}`);
   }
-  return row;
+  return job;
 }
 
-function buildPayloadFromMessage(row, message, targetAgentId) {
-  if (row.kind !== 'openclaw_message') return row.payload;
-  let data;
-  try {
-    data = JSON.parse(row.payload);
-  } catch {
-    data = {};
+async function confirm(message) {
+  const answer = await prompt(`${message} [y/N]: `);
+  return ['y', 'yes'].includes(answer.toLowerCase());
+}
+
+function removeSkill(options = {}) {
+  const workspace = getWorkspace(options);
+  const skillDir = join(workspace, 'skills', 'openclaw-reminders');
+  if (existsSync(skillDir)) {
+    rmSync(skillDir, { recursive: true, force: true });
   }
-  if (message) data.message = message;
-  if (targetAgentId) data.agent = targetAgentId;
-  return JSON.stringify(data);
+  return { skill_dir: skillDir, removed: true };
+}
+
+function removeConfig() {
+  if (existsSync(CONFIG_PATH)) {
+    unlinkSync(CONFIG_PATH);
+  }
+  return { config_path: CONFIG_PATH, removed: true };
+}
+
+async function uninstall(options) {
+  ensureOpenClawInstalled();
+  const workspace = getWorkspace(options);
+  const summary = {
+    workspace,
+    cron_jobs_removed: [],
+    skill_removed: null,
+    config_removed: null,
+  };
+
+  try {
+    const proceed = await confirm([
+      'This will remove:',
+      '- native OpenClaw reminder cron jobs created by openclaw-reminders',
+      '- the installed skill',
+      '- the openclaw-reminders config file',
+      '',
+      'Proceed?'
+    ].join('\n'));
+    if (!proceed) {
+      process.stderr.write('Uninstall cancelled.\n');
+      return;
+    }
+
+    for (const job of getReminderJobs({ workspace })) {
+      removeCronJob(job.id);
+      summary.cron_jobs_removed.push(job.id);
+    }
+    summary.skill_removed = removeSkill({ workspace });
+    summary.config_removed = removeConfig();
+  } finally {
+    closeReadline();
+  }
+
+  process.stderr.write(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧹  openclaw-reminders uninstall complete.
+
+Removed from this OpenClaw workspace:
+- reminder cron jobs created by openclaw-reminders
+- installed skill
+- openclaw-reminders config file
+
+The npm package is still installed globally.
+To remove it too, run:
+
+       npm uninstall -g openclaw-reminders
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
 }
 
 function addReminder(options) {
   const workspace = getWorkspace(options);
-  const db = connect(options);
-  const runAt = resolveRunAt(options);
-  const creatorAgentId = options['creator-agent'] || options.agent || 'unknown';
-  const targetAgentId = options['target-agent'] || options.agent || creatorAgentId;
-  const kind = options.kind || 'openclaw_message';
-  const payload = options.payload || JSON.stringify({
-    at: '+5s',
-    agent: targetAgentId,
-    session: 'main',
-    message: options.message,
-  });
-  const stmt = db.prepare('INSERT INTO reminders (workspace_path, creator_agent_id, target_agent_id, run_at, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-  const info = stmt.run(workspace, creatorAgentId, targetAgentId, runAt, kind, payload, utcNow());
-  console.log(JSON.stringify({ ok: true, id: Number(info.lastInsertRowid), run_at: runAt, workspace, creator_agent_id: creatorAgentId, target_agent_id: targetAgentId }));
+  const at = toCronAtArgument(options);
+  const text = options.message || options.text;
+  if (!text) {
+    throw new Error('add requires --message');
+  }
+  const args = [
+    'cron', 'add',
+    '--name', buildReminderName(text),
+    '--description', buildReminderDescription(workspace),
+    '--agent', options.agent || 'cto',
+    '--session', 'isolated',
+    '--at', at,
+    '--message', text,
+    '--announce',
+    '--delete-after-run',
+    '--json',
+  ];
+  const channel = options.channel || 'telegram';
+  const account = options.account || 'cto';
+  const to = options.to;
+  if (channel) args.push('--channel', channel);
+  if (account) args.push('--account', account);
+  if (to) args.push('--to', to);
+  const result = runOpenClaw(args, 'failed to create reminder cron job');
+  const job = parseJsonOutput(result.stdout, 'failed to parse reminder creation output');
+  console.log(JSON.stringify({ ok: true, reminder: formatReminderRow(job) }));
 }
 
 function listReminders(options) {
-  const db = connect(options);
-  const workspace = getWorkspace(options);
-  const rows = db.prepare('SELECT id, workspace_path, creator_agent_id, target_agent_id, run_at, kind, status, attempts, created_at, started_at, finished_at, payload, last_error FROM reminders WHERE workspace_path = ? ORDER BY run_at ASC').all(workspace);
+  const rows = getReminderJobs(options)
+    .map(formatReminderRow)
+    .sort((a, b) => String(a.run_at || '').localeCompare(String(b.run_at || '')));
   for (const row of rows) {
     console.log(JSON.stringify(row));
   }
 }
 
 function showReminder(options) {
-  const db = connect(options);
-  const workspace = getWorkspace(options);
-  const id = normalizeId(options.id);
-  const row = getReminderOrThrow(db, workspace, id);
-  console.log(JSON.stringify(row));
+  const id = options.id;
+  if (!id) throw new Error('show requires --id');
+  console.log(JSON.stringify(formatReminderRow(findReminderJobOrThrow(id, options))));
 }
 
 function removeReminder(options) {
-  const db = connect(options);
-  const workspace = getWorkspace(options);
-  const id = normalizeId(options.id);
-  getReminderOrThrow(db, workspace, id);
-  db.prepare('DELETE FROM reminders WHERE workspace_path = ? AND id = ?').run(workspace, id);
+  const id = options.id;
+  if (!id) throw new Error('remove requires --id');
+  findReminderJobOrThrow(id, options);
+  removeCronJob(id);
   console.log(JSON.stringify({ ok: true, removed: id }));
 }
 
 function updateReminder(options) {
-  const db = connect(options);
-  const workspace = getWorkspace(options);
-  const id = normalizeId(options.id);
-  const row = getReminderOrThrow(db, workspace, id);
-
-  const nextRunAt = (options.at || options.in || options['run-at']) ? resolveRunAt(options) : row.run_at;
-  const nextTargetAgentId = options['target-agent'] || options.agent || row.target_agent_id;
-  const nextStatus = options.status || row.status;
-  const nextMessage = options.message || null;
-  const nextPayload = options.payload || buildPayloadFromMessage(row, nextMessage, nextTargetAgentId);
-
-  db.prepare(`
-    UPDATE reminders
-    SET run_at = ?,
-        target_agent_id = ?,
-        payload = ?,
-        status = ?,
-        last_error = CASE WHEN ? = 'pending' THEN NULL ELSE last_error END,
-        finished_at = CASE WHEN ? = 'pending' THEN NULL ELSE finished_at END,
-        started_at = CASE WHEN ? = 'pending' THEN NULL ELSE started_at END
-    WHERE workspace_path = ? AND id = ?
-  `).run(nextRunAt, nextTargetAgentId, nextPayload, nextStatus, nextStatus, nextStatus, nextStatus, workspace, id);
-
-  const updated = getReminderOrThrow(db, workspace, id);
-  console.log(JSON.stringify({ ok: true, reminder: updated }));
-}
-
-function executeRow(db, row) {
-  db.prepare("UPDATE reminders SET status='running', attempts=attempts+1, started_at=? WHERE id=?").run(utcNow(), row.id);
-  try {
-    if (row.kind === 'shell') {
-      runShell(row.payload);
-    } else if (row.kind === 'openclaw_message') {
-      runOpenClawMessage(row.payload, row);
-    } else {
-      throw new Error(`unsupported kind: ${row.kind}`);
-    }
-    db.prepare("UPDATE reminders SET status='done', finished_at=?, last_error=NULL WHERE id=?").run(utcNow(), row.id);
-    console.log(JSON.stringify({ id: row.id, status: 'done', target_agent_id: row.target_agent_id }));
-  } catch (error) {
-    db.prepare("UPDATE reminders SET status='failed', finished_at=?, last_error=? WHERE id=?").run(utcNow(), String(error.message || error), row.id);
-    console.log(JSON.stringify({ id: row.id, status: 'failed', error: String(error.message || error), target_agent_id: row.target_agent_id }));
+  const id = options.id;
+  if (!id) throw new Error('update requires --id');
+  const current = findReminderJobOrThrow(id, options);
+  const args = ['cron', 'edit', id];
+  if (options.message || options.text) {
+    const text = options.message || options.text;
+    args.push('--message', text, '--name', buildReminderName(text));
   }
-}
-
-function runDue(options) {
-  const db = connect(options);
-  const workspace = getWorkspace(options);
-  const rows = db.prepare("SELECT * FROM reminders WHERE workspace_path = ? AND status='pending' AND run_at <= ? ORDER BY run_at ASC, id ASC").all(workspace, utcNow());
-  if (rows.length === 0) {
-    console.log(JSON.stringify({ ok: true, ran: 0, workspace }));
-    return;
+  if (options.at || options.in || options['run-at']) {
+    args.push('--at', toCronAtArgument(options));
   }
-  for (const row of rows) {
-    executeRow(db, row);
+  if (options.channel) args.push('--channel', options.channel);
+  if (options.account) args.push('--account', options.account);
+  if (options.to) args.push('--to', options.to);
+  args.push('--announce', '--json');
+  const result = runOpenClaw(args, `failed to update reminder ${id}`);
+  const updated = parseJsonOutput(result.stdout, `failed to parse reminder update output for ${id}`);
+  const normalized = formatReminderRow(updated);
+  if (!normalized.description) {
+    normalized.description = current.description;
   }
+  console.log(JSON.stringify({ ok: true, reminder: normalized }));
 }
 
 async function setup(options) {
@@ -362,19 +403,21 @@ async function setup(options) {
   const workspace = options.workspace ? resolve(options.workspace) : await ensureWorkspaceInteractive();
   const config = { workspace };
   saveConfig(config);
-  connect({ workspace }).close();
   const skill = installSkill({ workspace });
-  const runner = installRunner({ workspace, agent: options.agent || 'cto' });
-  console.log(JSON.stringify({ ok: true, workspace, db_path: join(workspace, APP_DIR_NAME, 'reminders.db'), skill, runner }));
-  process.stderr.write(`
+  const result = { ok: true, workspace, skill };
+  if (options.json) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+  process.stdout.write(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅  Setup complete!
 
-👉  Restart OpenClaw to activate the new skill:
+Workspace:
+   ${workspace}
 
-       openclaw gateway restart
-
-Then just talk to your agents naturally.
+This package now installs the reminder skill.
+Scheduling uses native OpenClaw cron jobs.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 }
@@ -385,17 +428,14 @@ function printHelp() {
 Setup once:
   openclaw-reminders setup
 
-Then just talk to your agents naturally.
-
-Advanced commands:
-  add --at <ISO> | --in <+1h> --agent <id> --message <text>
+Cron-native reminder commands:
+  add --in <2m> --message <text> [--channel <channel>] [--account <id>] [--to <dest>]
   list
-  show --id <id>
-  update --id <id> [--at <ISO> | --in <+1h>] [--message <text>] [--agent <id>] [--status <pending|failed|done>]
-  remove --id <id>
-  run-due
-  install-runner
-  install-skill`);
+  show --id <cron-job-id>
+  update --id <cron-job-id> [--in <5m> | --at <ISO>] [--message <text>] [--channel <channel>] [--account <id>] [--to <dest>]
+  remove --id <cron-job-id>
+  install-skill
+  uninstall`);
 }
 
 async function main() {
@@ -408,20 +448,16 @@ async function main() {
     await setup(options);
     return;
   }
-  if (command === 'install-runner') {
-    const runner = installRunner(options);
-    console.log(JSON.stringify({ ok: true, runner }));
-    return;
-  }
   if (command === 'install-skill') {
     const skill = installSkill(options);
     console.log(JSON.stringify({ ok: true, skill }));
     return;
   }
+  if (command === 'uninstall') {
+    await uninstall(options);
+    return;
+  }
   if (command === 'add' || command === 'remind') {
-    if ((!options.at && !options.in && !options['run-at']) || (!options.message && !options.payload)) {
-      throw new Error('add requires a time plus --message or --payload');
-    }
     addReminder(options);
     return;
   }
@@ -430,22 +466,15 @@ async function main() {
     return;
   }
   if (command === 'show') {
-    if (!options.id) throw new Error('show requires --id');
     showReminder(options);
     return;
   }
   if (command === 'remove') {
-    if (!options.id) throw new Error('remove requires --id');
     removeReminder(options);
     return;
   }
   if (command === 'update') {
-    if (!options.id) throw new Error('update requires --id');
     updateReminder(options);
-    return;
-  }
-  if (command === 'run-due') {
-    runDue(options);
     return;
   }
   throw new Error(`unknown command: ${command}`);
