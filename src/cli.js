@@ -457,14 +457,20 @@ async function setup(options) {
   connect({ workspace }).close();
   const skill = installSkill({ workspace });
   const runner = installRunner({ workspace, agent: options.agent || 'cto' });
-  console.log(JSON.stringify({ ok: true, workspace, db_path: join(workspace, APP_DIR_NAME, 'reminders.db'), skill, runner }));
-  process.stderr.write(`
+  const result = { ok: true, workspace, db_path: join(workspace, APP_DIR_NAME, 'reminders.db'), skill, runner };
+  if (options.json) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+  process.stdout.write(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅  Setup complete!
 
-👉  Restart OpenClaw to activate the new skill:
+Workspace:
+   ${workspace}
 
-       openclaw gateway restart
+Next step:
+   openclaw gateway restart
 
 Then just talk to your agents naturally.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

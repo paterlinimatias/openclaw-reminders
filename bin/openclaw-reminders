@@ -1,2 +1,11 @@
 #!/usr/bin/env node
+process.noDeprecation = true;
+process.emitWarning = ((originalEmitWarning) => (warning, ...args) => {
+  const message = typeof warning === 'string' ? warning : warning?.message;
+  const type = typeof args[0] === 'string' ? args[0] : warning?.name;
+  if (type === 'ExperimentalWarning' && String(message || '').includes('SQLite')) {
+    return;
+  }
+  return originalEmitWarning.call(process, warning, ...args);
+})(process.emitWarning);
 import '../src/cli.js';
