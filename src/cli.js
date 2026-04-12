@@ -366,6 +366,17 @@ async function setup(options) {
   const skill = installSkill({ workspace });
   const runner = installRunner({ workspace, agent: options.agent || 'cto' });
   console.log(JSON.stringify({ ok: true, workspace, db_path: join(workspace, APP_DIR_NAME, 'reminders.db'), skill, runner }));
+  process.stderr.write(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  Setup complete!
+
+👉  Restart OpenClaw to activate the new skill:
+
+       openclaw gateway restart
+
+Then just talk to your agents naturally.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
 }
 
 function printHelp() {
