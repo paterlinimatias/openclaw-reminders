@@ -305,15 +305,16 @@ async function uninstall(options) {
   console.log(JSON.stringify({ ok: true, uninstall: summary }));
   process.stderr.write(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧹  openclaw-reminders cleanup complete.
+🧹  openclaw-reminders uninstall complete.
 
-Removed:
+Removed from this OpenClaw workspace:
 - OpenClaw cron runner
 - installed skill
 - reminders database
 - openclaw-reminders config file
 
-If you also want to remove the npm package itself, run:
+The npm package is still installed globally.
+To remove it too, run:
 
        npm uninstall -g openclaw-reminders
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
