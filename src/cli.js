@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { DatabaseSync as Database } from 'node:sqlite';
+import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -137,6 +137,7 @@ function connect(options = {}) {
   const dbPath = getDbPath(options);
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
   db.exec(`
     CREATE TABLE IF NOT EXISTS reminders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
