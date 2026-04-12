@@ -31,6 +31,12 @@ Setup will:
 - install the runner cron job
 - install the bundled OpenClaw skill
 
+## Uninstall
+```bash
+openclaw-reminders uninstall
+npm uninstall -g openclaw-reminders
+```
+
 ## More docs
 - [CLI reference](docs/cli.md)
 - [Architecture](docs/architecture.md)
