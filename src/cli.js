@@ -288,7 +288,8 @@ async function uninstall(options) {
       'Proceed?'
     ].join('\n'));
     if (!proceed) {
-      throw new Error('uninstall cancelled');
+      process.stderr.write('Uninstall cancelled.\n');
+      return;
     }
 
     for (const job of findReminderRunnerJobs()) {
@@ -302,7 +303,6 @@ async function uninstall(options) {
     closeReadline();
   }
 
-  console.log(JSON.stringify({ ok: true, uninstall: summary }));
   process.stderr.write(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧹  openclaw-reminders uninstall complete.
