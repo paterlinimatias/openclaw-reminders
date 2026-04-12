@@ -1,6 +1,6 @@
 {
   "name": "openclaw-reminders",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "SQLite-backed reminders and scheduled task runner for OpenClaw",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "postinstall": "echo '\n✅ openclaw-reminders installed.\nRun setup once:\n   openclaw-reminders setup\n\nThen restart OpenClaw so it picks up the new skill:\n   openclaw gateway restart\n'"
+    "postinstall": "echo '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅  openclaw-reminders installed!\n\n👉  Now run:\n\n       openclaw-reminders setup\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'"
   },
   "keywords": [
     "openclaw",
