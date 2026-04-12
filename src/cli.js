@@ -82,11 +82,26 @@ function findWorkspace() {
   return null;
 }
 
+let sharedReadline = null;
+
+function getReadline() {
+  if (!sharedReadline) {
+    sharedReadline = readline.createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return sharedReadline;
+}
+
+function closeReadline() {
+  if (sharedReadline) {
+    sharedReadline.close();
+    sharedReadline = null;
+  }
+}
+
 function prompt(question) {
   return new Promise((resolvePromise) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const rl = getReadline();
     rl.question(question, (answer) => {
-      rl.close();
       resolvePromise(answer.trim());
     });
   });
@@ -261,22 +276,26 @@ async function uninstall(options) {
     config_removed: null,
   };
 
-  if (!(await confirm('Remove the OpenClaw cron runner and installed skill?'))) {
-    throw new Error('uninstall cancelled');
-  }
+  try {
+    if (!(await confirm('Remove the OpenClaw cron runner and installed skill?'))) {
+      throw new Error('uninstall cancelled');
+    }
 
-  for (const job of findReminderRunnerJobs()) {
-    removeCronJob(job.id);
-    summary.cron_jobs_removed.push(job.id);
-  }
-  summary.skill_removed = removeSkill({ workspace });
+    for (const job of findReminderRunnerJobs()) {
+      removeCronJob(job.id);
+      summary.cron_jobs_removed.push(job.id);
+    }
+    summary.skill_removed = removeSkill({ workspace });
 
-  if (await confirm('Also delete the reminders database for this workspace?')) {
-    summary.db_removed = removeDbAndAppDir({ workspace });
-  }
+    if (await confirm('Also delete the reminders database for this workspace?')) {
+      summary.db_removed = removeDbAndAppDir({ workspace });
+    }
 
-  if (await confirm('Also delete the openclaw-reminders config file?')) {
-    summary.config_removed = removeConfig();
+    if (await confirm('Also delete the openclaw-reminders config file?')) {
+      summary.config_removed = removeConfig();
+    }
+  } finally {
+    closeReadline();
   }
 
   console.log(JSON.stringify({ ok: true, uninstall: summary }));
