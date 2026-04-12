@@ -144,7 +144,8 @@ test('add and list reminders with native cron metadata', () => {
   const rows = listed.stdout.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].text, 'brush teeth');
-  assert.match(rows[0].name, /^openclaw-reminder:/);
+  assert.match(rows[0].name, /^reminder:/);
+  assert.match(rows[0].name, /brush-teeth/);
 });
 
 test('show update and remove reminder backed by cron jobs', () => {
@@ -180,6 +181,8 @@ test('show update and remove reminder backed by cron jobs', () => {
   const updatedJson = JSON.parse(updated.stdout.trim());
   assert.equal(updatedJson.ok, true);
   assert.equal(updatedJson.reminder.text, 'call bibi now');
+  assert.match(updatedJson.reminder.name, /^reminder:/);
+  assert.match(updatedJson.reminder.name, /call-bibi-now/);
 
   const removed = runCli(['remove', '--id', id], env);
   assert.equal(removed.status, 0, removed.stderr);

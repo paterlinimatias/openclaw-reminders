@@ -14,7 +14,7 @@ const DEFAULT_WORKSPACE_CANDIDATES = [
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(CURRENT_DIR, '..');
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, 'skills', 'openclaw-reminders');
-const REMINDER_NAME_PREFIX = 'openclaw-reminder:';
+const REMINDER_NAME_PREFIX = 'reminder:';
 const REMINDER_DESCRIPTION_PREFIX = 'Managed by openclaw-reminders';
 
 function parseTime(value) {
@@ -210,7 +210,13 @@ function getReminderJobs(options = {}) {
   return listCronJobs().filter((job) => {
     const name = job.name || '';
     const description = job.description || '';
-    return name.startsWith(REMINDER_NAME_PREFIX) && description.includes(workspace);
+    return (
+      name.startsWith(REMINDER_NAME_PREFIX)
+      && description.includes(workspace)
+      && job.payload?.message
+      && job.sessionTarget === 'isolated'
+      && job.deleteAfterRun === true
+    );
   });
 }
 
@@ -219,8 +225,18 @@ function removeCronJob(id) {
   return parseJsonOutput(result.stdout, `failed to parse cron remove output for ${id}`);
 }
 
-function buildReminderName(text) {
-  return `${REMINDER_NAME_PREFIX}${text}`;
+function slugifyReminderText(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'reminder';
+}
+
+function buildReminderName(text, atValue) {
+  const slug = slugifyReminderText(text);
+  const safeTimestamp = String(atValue).replace(/:/g, '-');
+  return `${REMINDER_NAME_PREFIX}${slug}:${safeTimestamp}`;
 }
 
 function buildReminderDescription(workspace) {
@@ -329,7 +345,7 @@ function addReminder(options) {
   }
   const args = [
     'cron', 'add',
-    '--name', buildReminderName(text),
+    '--name', buildReminderName(text, at),
     '--description', buildReminderDescription(workspace),
     '--agent', options.agent || 'cto',
     '--session', 'isolated',
@@ -380,10 +396,15 @@ function updateReminder(options) {
   const args = ['cron', 'edit', id];
   if (options.message || options.text) {
     const text = options.message || options.text;
-    args.push('--message', text, '--name', buildReminderName(text));
+    const atValue = (options.at || options.in || options['run-at']) ? toCronAtArgument(options) : (current.schedule?.at || 'unknown-time');
+    args.push('--message', text, '--name', buildReminderName(text, atValue));
   }
   if (options.at || options.in || options['run-at']) {
-    args.push('--at', toCronAtArgument(options));
+    const nextAt = toCronAtArgument(options);
+    args.push('--at', nextAt);
+    if (!(options.message || options.text)) {
+      args.push('--name', buildReminderName(current.payload?.message || 'reminder', nextAt));
+    }
   }
   if (options.channel) args.push('--channel', options.channel);
   if (options.account) args.push('--account', options.account);

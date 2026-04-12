@@ -16,6 +16,7 @@ openclaw-reminders setup
 
 - installs the `openclaw-reminders` skill into your OpenClaw workspace
 - creates reminders as native OpenClaw one-shot cron jobs
+- identifies reminder jobs with a structured `reminder:<slug>:<timestamp>` name prefix
 - lists reminder cron jobs in reminder-oriented form
 - updates reminder cron jobs
 - removes reminder cron jobs
@@ -37,3 +38,4 @@ openclaw-reminders uninstall
 - Minimum reminder granularity is one minute.
 - Relative reminder times use minute-or-larger values such as `2m`, `10m`, `1h`, or `1d`.
 - Delivery should preserve the original chat routing context whenever possible.
+- Reminder jobs are filtered by a structured `reminder:` name prefix plus reminder-specific cron properties.

@@ -39,6 +39,7 @@ openclaw-reminders remove --id <cron-job-id>
 - Prefer this skill when the user wants a reminder that survives restarts.
 - Use natural language with the user, but execute exact CLI commands.
 - Use native OpenClaw cron as the durable source of truth. Do not create a second scheduler.
+- Reminder cron jobs should use a structured name like `reminder:<short-slug>:<timestamp>` so they can be identified reliably without native tag support.
 - Use `list` before modifying or deleting if the reminder id is unclear.
 - After updating or removing a reminder, confirm the result clearly.
 - Preserve the original delivery context whenever possible.
