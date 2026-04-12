@@ -16,6 +16,7 @@ const PACKAGE_ROOT = resolve(CURRENT_DIR, '..');
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, 'skills', 'openclaw-reminders');
 const REMINDER_NAME_PREFIX = 'reminder:';
 const REMINDER_DESCRIPTION_PREFIX = 'Managed by openclaw-reminders';
+const OPENCLAW_TIMEOUT_MS = Number(process.env.OPENCLAW_REMINDERS_TIMEOUT_MS || 12000);
 
 function parseTime(value) {
   const parsed = new Date(value);
@@ -192,7 +193,10 @@ function parseJsonOutput(text, fallbackMessage) {
 }
 
 function runOpenClaw(args, fallbackMessage) {
-  const result = spawnSync('openclaw', args, { encoding: 'utf8' });
+  const result = spawnSync('openclaw', args, { encoding: 'utf8', timeout: OPENCLAW_TIMEOUT_MS });
+  if (result.error?.code === 'ETIMEDOUT') {
+    throw new Error('Timed out while talking to OpenClaw. The gateway may be slow or unavailable.');
+  }
   if (result.status !== 0) {
     throw new Error((result.stderr || result.stdout || fallbackMessage).trim());
   }
@@ -205,18 +209,41 @@ function listCronJobs() {
   return parsed.jobs || [];
 }
 
+function getCurrentContext(options = {}) {
+  return {
+    channel: options.channel || process.env.OPENCLAW_REMINDERS_CHANNEL || null,
+    account: options.account || process.env.OPENCLAW_REMINDERS_ACCOUNT || null,
+    to: options.to || process.env.OPENCLAW_REMINDERS_TO || null,
+  };
+}
+
+function matchesReminderShape(job, workspace) {
+  const name = job.name || '';
+  const description = job.description || '';
+  return (
+    name.startsWith(REMINDER_NAME_PREFIX)
+    && description.includes(workspace)
+    && job.payload?.message
+    && job.sessionTarget === 'isolated'
+    && job.deleteAfterRun === true
+  );
+}
+
+function matchesContext(job, context) {
+  if (!context.channel && !context.account && !context.to) return true;
+  if (context.channel && job.delivery?.channel !== context.channel) return false;
+  if (context.account && job.delivery?.accountId !== context.account) return false;
+  if (context.to && job.delivery?.to !== context.to) return false;
+  return true;
+}
+
 function getReminderJobs(options = {}) {
   const workspace = getWorkspace(options);
+  const context = getCurrentContext(options);
   return listCronJobs().filter((job) => {
-    const name = job.name || '';
-    const description = job.description || '';
-    return (
-      name.startsWith(REMINDER_NAME_PREFIX)
-      && description.includes(workspace)
-      && job.payload?.message
-      && job.sessionTarget === 'isolated'
-      && job.deleteAfterRun === true
-    );
+    if (!matchesReminderShape(job, workspace)) return false;
+    if (options.all) return true;
+    return matchesContext(job, context);
   });
 }
 
@@ -254,6 +281,50 @@ function formatReminderRow(job) {
     name: job.name,
     description: job.description,
   };
+}
+
+function formatFriendlyTime(runAt) {
+  if (!runAt) return 'unknown time';
+  const date = new Date(runAt);
+  if (Number.isNaN(date.getTime())) return runAt;
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin >= 0 && diffMin < 60) {
+    if (diffMin <= 1) return 'in 1 minute';
+    return `in ${diffMin} minutes`;
+  }
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const targetDay = new Date(date);
+  targetDay.setHours(0, 0, 0, 0);
+  const dayDiff = Math.round((targetDay.getTime() - today.getTime()) / 86400000);
+  const timeText = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
+  if (dayDiff === 0) return `today at ${timeText}`;
+  if (dayDiff === 1) return `tomorrow at ${timeText}`;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function truncate(text, max = 48) {
+  const value = String(text || '');
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function printReminderList(rows, options = {}) {
+  if (options.json) {
+    console.log(JSON.stringify({ ok: true, reminders: rows }));
+    return;
+  }
+  if (!rows.length) {
+    console.log(options.all ? 'No reminders scheduled.' : 'No reminders scheduled for this chat.');
+    return;
+  }
+  for (const row of rows) {
+    const when = formatFriendlyTime(row.run_at);
+    const exact = row.run_at ? ` (${row.run_at})` : '';
+    console.log(`${row.id}  ${truncate(row.text)}  ${when}${exact}`);
+  }
 }
 
 function findReminderJobOrThrow(id, options = {}) {
@@ -370,15 +441,23 @@ function listReminders(options) {
   const rows = getReminderJobs(options)
     .map(formatReminderRow)
     .sort((a, b) => String(a.run_at || '').localeCompare(String(b.run_at || '')));
-  for (const row of rows) {
-    console.log(JSON.stringify(row));
-  }
+  printReminderList(rows, options);
 }
 
 function showReminder(options) {
   const id = options.id;
   if (!id) throw new Error('show requires --id');
-  console.log(JSON.stringify(formatReminderRow(findReminderJobOrThrow(id, options))));
+  const row = formatReminderRow(findReminderJobOrThrow(id, options));
+  if (options.json) {
+    console.log(JSON.stringify(row));
+    return;
+  }
+  console.log(`ID: ${row.id}`);
+  console.log(`Text: ${row.text}`);
+  console.log(`When: ${formatFriendlyTime(row.run_at)}${row.run_at ? ` (${row.run_at})` : ''}`);
+  if (row.channel || row.account || row.to) {
+    console.log(`Route: ${row.channel || '-'} / ${row.account || '-'} / ${row.to || '-'}`);
+  }
 }
 
 function removeReminder(options) {
@@ -451,8 +530,8 @@ Setup once:
 
 Cron-native reminder commands:
   add --in <2m> --message <text> [--channel <channel>] [--account <id>] [--to <dest>]
-  list
-  show --id <cron-job-id>
+  list [--json] [--all] [--channel <channel>] [--account <id>] [--to <dest>]
+  show --id <cron-job-id> [--json]
   update --id <cron-job-id> [--in <5m> | --at <ISO>] [--message <text>] [--channel <channel>] [--account <id>] [--to <dest>]
   remove --id <cron-job-id>
   install-skill

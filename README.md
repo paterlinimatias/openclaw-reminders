@@ -17,6 +17,8 @@ openclaw-reminders setup
 - installs the `openclaw-reminders` skill into your OpenClaw workspace
 - creates reminders as native OpenClaw one-shot cron jobs
 - identifies reminder jobs with a structured `reminder:<slug>:<timestamp>` name prefix
+- lists reminders in the current chat/account by default, with `--all` to widen scope
+- supports human-friendly output by default and `--json` for agents
 - lists reminder cron jobs in reminder-oriented form
 - updates reminder cron jobs
 - removes reminder cron jobs
@@ -26,6 +28,8 @@ openclaw-reminders setup
 ```bash
 openclaw-reminders add --in 2m --message "brush teeth" --channel telegram --account cto --to 8020357623
 openclaw-reminders list
+openclaw-reminders list --json
+openclaw-reminders list --all
 openclaw-reminders show --id <cron-job-id>
 openclaw-reminders update --id <cron-job-id> --in 10m --message "call bibi"
 openclaw-reminders remove --id <cron-job-id>
@@ -39,3 +43,4 @@ openclaw-reminders uninstall
 - Relative reminder times use minute-or-larger values such as `2m`, `10m`, `1h`, or `1d`.
 - Delivery should preserve the original chat routing context whenever possible.
 - Reminder jobs are filtered by a structured `reminder:` name prefix plus reminder-specific cron properties.
+- When routing context is available, listing defaults to the current `channel` / `account` / `to` scope.

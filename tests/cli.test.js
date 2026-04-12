@@ -65,6 +65,10 @@ if (args[1] === 'add') {
   process.exit(0);
 }
 if (args[1] === 'list') {
+  if (process.env.OPENCLAW_STUB_SLEEP_MS) {
+    const end = Date.now() + Number(process.env.OPENCLAW_STUB_SLEEP_MS);
+    while (Date.now() < end) {}
+  }
   process.stdout.write(JSON.stringify({ jobs: readJobs() }));
   process.exit(0);
 }
@@ -139,13 +143,17 @@ test('add and list reminders with native cron metadata', () => {
   assert.equal(addJson.reminder.account, 'cto');
   assert.equal(addJson.reminder.to, '8020357623');
 
-  const listed = runCli(['list'], env);
+  const listed = runCli(['list', '--json'], env);
   assert.equal(listed.status, 0, listed.stderr);
-  const rows = listed.stdout.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const rows = JSON.parse(listed.stdout.trim()).reminders;
   assert.equal(rows.length, 1);
   assert.equal(rows[0].text, 'brush teeth');
   assert.match(rows[0].name, /^reminder:/);
   assert.match(rows[0].name, /brush-teeth/);
+
+  const pretty = runCli(['list'], env);
+  assert.equal(pretty.status, 0, pretty.stderr);
+  assert.match(pretty.stdout, /brush teeth/);
 });
 
 test('show update and remove reminder backed by cron jobs', () => {
@@ -172,7 +180,7 @@ test('show update and remove reminder backed by cron jobs', () => {
   const added = JSON.parse(addResult.stdout.trim());
   const id = added.reminder.id;
 
-  const shown = runCli(['show', '--id', id], env);
+  const shown = runCli(['show', '--id', id, '--json'], env);
   assert.equal(shown.status, 0, shown.stderr);
   assert.equal(JSON.parse(shown.stdout.trim()).text, 'call bibi');
 
@@ -216,6 +224,87 @@ test('install-skill copies bundled skill into workspace', () => {
   const json = JSON.parse(result.stdout.trim());
   assert.equal(json.ok, true);
   assert.equal(json.skill.skill_dir, join(workspace, 'skills', 'openclaw-reminders'));
+});
+
+test('list filters to current context by default and --all expands scope', () => {
+  const root = makeTempDir('ocr-native-');
+  const workspace = join(root, 'workspace');
+  const binDir = join(root, 'bin');
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  const logPath = join(root, 'log.json');
+  const jobsPath = join(root, 'jobs.json');
+  writeFileSync(logPath, '[]\n');
+  writeFileSync(jobsPath, JSON.stringify([
+    {
+      id: 'job-1',
+      name: 'reminder:one:2026-04-12T22-00-00.000Z',
+      description: `Managed by openclaw-reminders for ${workspace}`,
+      deleteAfterRun: true,
+      schedule: { kind: 'at', at: '2026-04-12T22:00:00.000Z' },
+      sessionTarget: 'isolated',
+      payload: { kind: 'agentTurn', message: 'same chat' },
+      delivery: { mode: 'announce', channel: 'telegram', to: '8020357623', accountId: 'cto' }
+    },
+    {
+      id: 'job-2',
+      name: 'reminder:two:2026-04-12T22-10-00.000Z',
+      description: `Managed by openclaw-reminders for ${workspace}`,
+      deleteAfterRun: true,
+      schedule: { kind: 'at', at: '2026-04-12T22:10:00.000Z' },
+      sessionTarget: 'isolated',
+      payload: { kind: 'agentTurn', message: 'other account' },
+      delivery: { mode: 'announce', channel: 'telegram', to: '8020357623', accountId: 'security' }
+    }
+  ], null, 2) + '\n');
+  writeOpenClawStub(binDir, logPath, jobsPath);
+
+  const env = {
+    OPENCLAW_REMINDERS_WORKSPACE: workspace,
+    OPENCLAW_REMINDERS_CHANNEL: 'telegram',
+    OPENCLAW_REMINDERS_ACCOUNT: 'cto',
+    OPENCLAW_REMINDERS_TO: '8020357623',
+    PATH: `${binDir}:${process.env.PATH}`,
+    OPENCLAW_STUB_LOG: logPath,
+    OPENCLAW_STUB_JOBS: jobsPath,
+  };
+
+  const scoped = runCli(['list', '--json'], env);
+  assert.equal(scoped.status, 0, scoped.stderr);
+  const scopedJson = JSON.parse(scoped.stdout.trim());
+  assert.equal(scopedJson.reminders.length, 1);
+  assert.equal(scopedJson.reminders[0].text, 'same chat');
+
+  const all = runCli(['list', '--json', '--all'], env);
+  assert.equal(all.status, 0, all.stderr);
+  const allJson = JSON.parse(all.stdout.trim());
+  assert.equal(allJson.reminders.length, 2);
+});
+
+test('list fails fast with a clear timeout error', () => {
+  const root = makeTempDir('ocr-native-');
+  const workspace = join(root, 'workspace');
+  const binDir = join(root, 'bin');
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  const logPath = join(root, 'log.json');
+  const jobsPath = join(root, 'jobs.json');
+  writeFileSync(logPath, '[]\n');
+  writeFileSync(jobsPath, '[]\n');
+  writeOpenClawStub(binDir, logPath, jobsPath);
+
+  const env = {
+    OPENCLAW_REMINDERS_WORKSPACE: workspace,
+    OPENCLAW_REMINDERS_TIMEOUT_MS: '50',
+    OPENCLAW_STUB_SLEEP_MS: '200',
+    PATH: `${binDir}:${process.env.PATH}`,
+    OPENCLAW_STUB_LOG: logPath,
+    OPENCLAW_STUB_JOBS: jobsPath,
+  };
+
+  const result = runCli(['list'], env);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Timed out while talking to OpenClaw/);
 });
 
 test('rejects sub-minute relative times', () => {

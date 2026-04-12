@@ -17,6 +17,8 @@ openclaw-reminders add --in 2h --message "Check deploy" --channel telegram --acc
 List reminders:
 ```bash
 openclaw-reminders list
+openclaw-reminders list --all
+openclaw-reminders list --json
 ```
 
 Show one reminder:
@@ -41,6 +43,8 @@ openclaw-reminders remove --id <cron-job-id>
 - Use native OpenClaw cron as the durable source of truth. Do not create a second scheduler.
 - Reminder cron jobs should use a structured name like `reminder:<short-slug>:<timestamp>` so they can be identified reliably without native tag support.
 - Use `list` before modifying or deleting if the reminder id is unclear.
+- By default, `list` should stay scoped to the current chat routing context when possible. Use `--all` only when the user really wants reminders across contexts.
+- Prefer default human-readable list output in conversation. Use `--json` only for automation or structured follow-up work.
 - After updating or removing a reminder, confirm the result clearly.
 - Preserve the original delivery context whenever possible.
 - When the reminder fires, notify the user in the same chat/channel where the reminder request was originally made.
