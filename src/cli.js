@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync, rmSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -16,7 +16,12 @@ const PACKAGE_ROOT = resolve(CURRENT_DIR, '..');
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, 'skills', 'openclaw-reminders');
 const REMINDER_NAME_PREFIX = 'reminder:';
 const REMINDER_DESCRIPTION_PREFIX = 'Managed by openclaw-reminders';
-const OPENCLAW_TIMEOUT_MS = Number(process.env.OPENCLAW_REMINDERS_TIMEOUT_MS || 12000);
+const OPENCLAW_TIMEOUT_MS = Number(process.env.OPENCLAW_REMINDERS_TIMEOUT_MS || 60000);
+const OPENCLAW_PROGRESS_MESSAGES = [
+  [10000, 'Still working on it, OpenClaw is taking its time today...'],
+  [20000, 'Still waiting, the cron gateway is moving like it just woke up from a nap.'],
+  [30000, 'Hang tight, I’m still listening for cron. This box is thinking very hard.'],
+];
 
 function parseTime(value) {
   const parsed = new Date(value);
@@ -192,19 +197,60 @@ function parseJsonOutput(text, fallbackMessage) {
   return JSON.parse(trimmed);
 }
 
-function runOpenClaw(args, fallbackMessage) {
-  const result = spawnSync('openclaw', args, { encoding: 'utf8', timeout: OPENCLAW_TIMEOUT_MS });
-  if (result.error?.code === 'ETIMEDOUT') {
-    throw new Error('Timed out while talking to OpenClaw. The gateway may be slow or unavailable.');
-  }
-  if (result.status !== 0) {
-    throw new Error((result.stderr || result.stdout || fallbackMessage).trim());
-  }
-  return result;
+async function runOpenClaw(args, fallbackMessage, options = {}) {
+  const timeoutMs = Number(options.timeoutMs || OPENCLAW_TIMEOUT_MS);
+  const progressMessages = options.progressMessages === false ? [] : OPENCLAW_PROGRESS_MESSAGES;
+  return await new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn('openclaw', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timers = [];
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      for (const timer of timers) clearTimeout(timer);
+      fn(value);
+    };
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      finish(rejectPromise, error);
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGTERM') {
+        finish(rejectPromise, new Error('Timed out while talking to OpenClaw. The gateway may be slow or unavailable.'));
+        return;
+      }
+      if (code !== 0) {
+        finish(rejectPromise, new Error((stderr || stdout || fallbackMessage).trim()));
+        return;
+      }
+      finish(resolvePromise, { status: code, stdout, stderr });
+    });
+
+    for (const [delay, message] of progressMessages) {
+      if (delay >= timeoutMs) continue;
+      timers.push(setTimeout(() => {
+        process.stderr.write(`${message}\n`);
+      }, delay));
+    }
+
+    const timeoutTimer = setTimeout(() => {
+      child.kill('SIGTERM');
+    }, timeoutMs);
+  });
 }
 
-function listCronJobs() {
-  const result = runOpenClaw(['cron', 'list', '--json'], 'failed to list OpenClaw cron jobs');
+async function listCronJobs() {
+  const result = await runOpenClaw(['cron', 'list', '--json'], 'failed to list OpenClaw cron jobs');
   const parsed = parseJsonOutput(result.stdout, 'failed to parse OpenClaw cron list output');
   return parsed.jobs || [];
 }
@@ -237,18 +283,19 @@ function matchesContext(job, context) {
   return true;
 }
 
-function getReminderJobs(options = {}) {
+async function getReminderJobs(options = {}) {
   const workspace = getWorkspace(options);
   const context = getCurrentContext(options);
-  return listCronJobs().filter((job) => {
+  const jobs = await listCronJobs();
+  return jobs.filter((job) => {
     if (!matchesReminderShape(job, workspace)) return false;
     if (options.all) return true;
     return matchesContext(job, context);
   });
 }
 
-function removeCronJob(id) {
-  const result = runOpenClaw(['cron', 'rm', id, '--json'], `failed to remove cron job ${id}`);
+async function removeCronJob(id) {
+  const result = await runOpenClaw(['cron', 'rm', id, '--json'], `failed to remove cron job ${id}`);
   return parseJsonOutput(result.stdout, `failed to parse cron remove output for ${id}`);
 }
 
@@ -327,8 +374,8 @@ function printReminderList(rows, options = {}) {
   }
 }
 
-function findReminderJobOrThrow(id, options = {}) {
-  const job = getReminderJobs(options).find((entry) => entry.id === id);
+async function findReminderJobOrThrow(id, options = {}) {
+  const job = (await getReminderJobs(options)).find((entry) => entry.id === id);
   if (!job) {
     throw new Error(`reminder not found: ${id}`);
   }
@@ -380,8 +427,8 @@ async function uninstall(options) {
       return;
     }
 
-    for (const job of getReminderJobs({ workspace })) {
-      removeCronJob(job.id);
+    for (const job of await getReminderJobs({ workspace })) {
+      await removeCronJob(job.id);
       summary.cron_jobs_removed.push(job.id);
     }
     summary.skill_removed = removeSkill({ workspace });
@@ -407,7 +454,7 @@ To remove it too, run:
 `);
 }
 
-function addReminder(options) {
+async function addReminder(options) {
   const workspace = getWorkspace(options);
   const at = toCronAtArgument(options);
   const text = options.message || options.text;
@@ -432,22 +479,22 @@ function addReminder(options) {
   if (channel) args.push('--channel', channel);
   if (account) args.push('--account', account);
   if (to) args.push('--to', to);
-  const result = runOpenClaw(args, 'failed to create reminder cron job');
+  const result = await runOpenClaw(args, 'failed to create reminder cron job', { progressMessages: false });
   const job = parseJsonOutput(result.stdout, 'failed to parse reminder creation output');
   console.log(JSON.stringify({ ok: true, reminder: formatReminderRow(job) }));
 }
 
-function listReminders(options) {
-  const rows = getReminderJobs(options)
+async function listReminders(options) {
+  const rows = (await getReminderJobs(options))
     .map(formatReminderRow)
     .sort((a, b) => String(a.run_at || '').localeCompare(String(b.run_at || '')));
   printReminderList(rows, options);
 }
 
-function showReminder(options) {
+async function showReminder(options) {
   const id = options.id;
   if (!id) throw new Error('show requires --id');
-  const row = formatReminderRow(findReminderJobOrThrow(id, options));
+  const row = formatReminderRow(await findReminderJobOrThrow(id, options));
   if (options.json) {
     console.log(JSON.stringify(row));
     return;
@@ -460,18 +507,18 @@ function showReminder(options) {
   }
 }
 
-function removeReminder(options) {
+async function removeReminder(options) {
   const id = options.id;
   if (!id) throw new Error('remove requires --id');
-  findReminderJobOrThrow(id, options);
-  removeCronJob(id);
+  await findReminderJobOrThrow(id, options);
+  await removeCronJob(id);
   console.log(JSON.stringify({ ok: true, removed: id }));
 }
 
-function updateReminder(options) {
+async function updateReminder(options) {
   const id = options.id;
   if (!id) throw new Error('update requires --id');
-  const current = findReminderJobOrThrow(id, options);
+  const current = await findReminderJobOrThrow(id, options);
   const args = ['cron', 'edit', id];
   if (options.message || options.text) {
     const text = options.message || options.text;
@@ -489,7 +536,7 @@ function updateReminder(options) {
   if (options.account) args.push('--account', options.account);
   if (options.to) args.push('--to', options.to);
   args.push('--announce', '--json');
-  const result = runOpenClaw(args, `failed to update reminder ${id}`);
+  const result = await runOpenClaw(args, `failed to update reminder ${id}`, { progressMessages: false });
   const updated = parseJsonOutput(result.stdout, `failed to parse reminder update output for ${id}`);
   const normalized = formatReminderRow(updated);
   if (!normalized.description) {
@@ -558,23 +605,23 @@ async function main() {
     return;
   }
   if (command === 'add' || command === 'remind') {
-    addReminder(options);
+    await addReminder(options);
     return;
   }
   if (command === 'list') {
-    listReminders(options);
+    await listReminders(options);
     return;
   }
   if (command === 'show') {
-    showReminder(options);
+    await showReminder(options);
     return;
   }
   if (command === 'remove') {
-    removeReminder(options);
+    await removeReminder(options);
     return;
   }
   if (command === 'update') {
-    updateReminder(options);
+    await updateReminder(options);
     return;
   }
   throw new Error(`unknown command: ${command}`);
