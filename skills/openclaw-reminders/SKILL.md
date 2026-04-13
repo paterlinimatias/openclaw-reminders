@@ -14,7 +14,7 @@ The user stays in chat and speaks naturally. The agent converts that into an exa
 For reminder creation, keep replies simple and consistent.
 
 When the instruction is received:
-- `⚙️ Setting up reminder...`
+- send `⚙️ Setting up reminder...` immediately in chat, before any CLI or cron call starts
 
 If it is still waiting after 10 seconds:
 - `👀 Still working on it...`
@@ -31,7 +31,9 @@ For reminder lists:
 
 ## Rules
 
-- The first real action must be the CLI command, not a success reply.
+- The first user-visible action must be the setup message in chat: `⚙️ Setting up reminder...`.
+- Send that setup message immediately after reminder intent is recognized, before any CLI or cron call starts.
+- The first tool action must then be the CLI command, not a success reply.
 - Wait up to 2 minutes for the CLI result before giving up.
 - Send the setup message immediately when the reminder request is received.
 - Send at most one slow-progress message, after 10 seconds of real waiting.

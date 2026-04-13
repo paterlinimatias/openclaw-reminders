@@ -43,7 +43,7 @@ openclaw-reminders remove --id <cron-job-id>
 Keep reminder creation replies tiny and consistent.
 
 Recommended pattern:
-- immediately: `⚙️ Setting up reminder...`
+- immediately, before any CLI or cron call starts: `⚙️ Setting up reminder...`
 - if still waiting after 10 seconds: `👀 Still working on it...`
 - after success: `⏰ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
 - when it later fires: `⏰ Reminder: <reminder message> <relevant emoji>`
@@ -60,7 +60,9 @@ Relative time rules:
 - 24 hours or more: days from now
 
 Rules:
-- the first real action should be the CLI command, not a success reply
+- the first user-visible action should be the setup message: `⚙️ Setting up reminder...`
+- send that setup message immediately after reminder intent is recognized, before any CLI or cron call starts
+- the first tool action should then be the CLI command, not a success reply
 - wait up to 2 minutes for the CLI to finish
 - send the setup message immediately when the request is received
 - send at most one slow-progress message after 10 seconds of real waiting
