@@ -33,14 +33,8 @@ function parseTime(value) {
   return parsed;
 }
 
-function floorToMinute(date) {
-  const next = new Date(date);
-  next.setUTCSeconds(0, 0);
-  return next;
-}
-
-function toIsoMinute(date) {
-  return floorToMinute(date).toISOString();
+function toIsoTimestamp(date) {
+  return new Date(date).toISOString();
 }
 
 function parseDuration(value) {
@@ -51,32 +45,22 @@ function parseDuration(value) {
   }
   const amount = Number(match[1]);
   const unit = match[2];
-  if (unit === 's') {
-    throw new Error(`sub-minute relative time is not supported: ${value}. Use whole minutes or larger units.`);
-  }
-  const multipliers = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+  const multipliers = { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 };
   return new Date(Date.now() + amount * multipliers[unit]);
 }
 
 function resolveRunAt(options) {
-  if (options.at) return toIsoMinute(parseTime(options.at));
-  if (options.in) return toIsoMinute(parseDuration(options.in));
-  if (options['run-at']) return toIsoMinute(parseTime(options['run-at']));
+  if (options.at) return toIsoTimestamp(parseTime(options.at));
+  if (options.in) return toIsoTimestamp(parseDuration(options.in));
+  if (options['run-at']) return toIsoTimestamp(parseTime(options['run-at']));
   throw new Error('missing time: use --at, --in, or --run-at');
 }
 
 function toCronAtArgument(options) {
-  if (options.at) return toIsoMinute(parseTime(options.at));
-  if (options['run-at']) return toIsoMinute(parseTime(options['run-at']));
+  if (options.at) return toIsoTimestamp(parseTime(options.at));
+  if (options['run-at']) return toIsoTimestamp(parseTime(options['run-at']));
   if (options.in) {
-    const match = /^\+?(\d+)([mhd])$/.exec(options.in.trim());
-    if (!match) {
-      if (/^\+?\d+s$/.test(options.in.trim())) {
-        throw new Error(`sub-minute relative time is not supported: ${options.in}. Use whole minutes or larger units.`);
-      }
-      throw new Error(`invalid relative time: ${options.in}`);
-    }
-    return `${match[1]}${match[2]}`;
+    return toIsoTimestamp(parseDuration(options.in));
   }
   throw new Error('missing time: use --at, --in, or --run-at');
 }

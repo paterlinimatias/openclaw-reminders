@@ -80,8 +80,8 @@ openclaw-reminders uninstall
 ## Notes
 
 - Reminder scheduling is backed by native OpenClaw cron.
-- Minimum reminder granularity is one minute.
-- Relative reminder times use minute-or-larger values such as `2m`, `10m`, `1h`, or `1d`.
+- Reminders can use exact timestamps, including seconds, because native OpenClaw cron accepts one-shot ISO times.
+- Relative reminder times support `s`, `m`, `h`, and `d`, for example `23s`, `2m`, `10m`, `1h`, or `1d`.
 - Delivery should preserve the original chat routing context whenever possible.
 - Reminder jobs are filtered by a structured `reminder:` name prefix plus reminder-specific cron properties.
 - When routing context is available, listing defaults to the current `channel` / `account` / `to` scope.

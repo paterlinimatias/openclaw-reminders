@@ -307,7 +307,7 @@ test('list fails fast with a clear timeout error', () => {
   assert.match(result.stderr, /Timed out while talking to OpenClaw/);
 });
 
-test('rejects sub-minute relative times', () => {
+test('supports sub-minute relative times with exact timestamps', () => {
   const root = makeTempDir('ocr-native-');
   const workspace = join(root, 'workspace');
   const binDir = join(root, 'bin');
@@ -326,7 +326,16 @@ test('rejects sub-minute relative times', () => {
     OPENCLAW_STUB_JOBS: jobsPath,
   };
 
-  const result = runCli(['add', '--in', '10s', '--message', 'too fast'], env);
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /sub-minute relative time is not supported/);
+  const beforeMs = Date.now();
+  const result = runCli(['add', '--in', '10s', '--message', 'brush teeth'], env);
+  assert.equal(result.status, 0);
+
+  const jobs = JSON.parse(readFileSync(jobsPath, 'utf8'));
+  assert.equal(jobs.length, 1);
+  const runAt = jobs[0].schedule?.at;
+  const runAtMs = Date.parse(runAt);
+  assert.ok(Number.isFinite(runAtMs), 'expected ISO timestamp');
+  assert.ok(runAtMs >= beforeMs + 9000, `expected runAt >= before + 9s, got ${runAt}`);
+  assert.ok(runAtMs <= beforeMs + 20000, `expected runAt <= before + 20s, got ${runAt}`);
+  assert.match(runAt, /:\d{2}\.\d{3}Z$/);
 });

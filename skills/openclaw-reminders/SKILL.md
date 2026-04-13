@@ -87,15 +87,13 @@ openclaw-reminders remove --id <cron-job-id>
 - When the reminder fires, notify the user in the same chat/channel where the reminder request was originally made.
 - Use stable routing context such as channel, account, and chat identity. Do not depend on a fragile session key that may change after `/new`.
 - Do not silently reroute reminder notifications to a different channel unless the user explicitly asked for that.
-- The minimum reminder time unit is **one minute**.
+- Native OpenClaw cron accepts exact one-shot ISO timestamps, including seconds.
 - Accept examples like:
+  - in 23 seconds
   - in 1 minute
   - in 20 minutes
   - on a specific date at a specific hour
-- Do **not** create reminders for sub-minute timing such as:
-  - in 10 seconds
-  - in 30 seconds
-- Do **not** keep fractional-minute precision.
-- When the user gives a fractional number of minutes, round **down** to the nearest whole minute before scheduling.
-- Native OpenClaw cron accepts `10m` or an ISO timestamp for one-shot runs. If the user says `in 10 minutes`, map that to `--in 10m` semantics in the CLI.
-- When listing reminders to the user, prefer friendly human output such as `in 2 minutes`, `today at 4:30 PM`, or `tomorrow at 9:00 AM` instead of raw ISO timestamps unless the user asked for exact timestamps.
+- Relative reminder times may use seconds, minutes, hours, or days.
+- If the user asks for sub-minute timing, honor it instead of rounding up.
+- Use exact timestamps when needed so reminders can fire at second-level precision.
+- When listing reminders to the user, prefer friendly human output such as `in 23 seconds`, `in 2 minutes`, `today at 4:30 PM`, or `tomorrow at 9:00 AM` instead of raw ISO timestamps unless the user asked for exact timestamps.
