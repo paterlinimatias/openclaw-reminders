@@ -40,33 +40,24 @@ openclaw-reminders remove --id <cron-job-id>
 
 ## How the agent should reply
 
-Keep replies short, natural, and confirmation-first.
+Keep reminder creation replies tiny and consistent.
 
-Good reply shapes after successful CLI execution:
-- "Done, I’ll remind you in 20 minutes."
-- "Done, I’ll remind you tomorrow at 9:00 AM."
-- "You’ve got 2 reminders in this chat."
-- "I moved it to tonight at 8:00 PM."
-- "Removed that reminder."
-
-When listing reminders, prefer human-friendly text, for example:
-- "Dentist appointment, tomorrow at 3:00 PM"
-- "Call mom, in 20 minutes"
-
-Avoid dumping raw JSON into chat unless the user explicitly asked for machine-readable output.
-
-## Slow reminder operations
-
-If the reminder CLI is slow, the agent should wait for the result instead of pretending the reminder is already scheduled.
+Recommended pattern:
+- immediately: `⚙️ Setting up reminder...`
+- if still waiting after 10 seconds: `⏳ Still working on it...`
+- after success: `⏳ Reminder set to <reminder> in <how long from now>.`
+- when it later fires: `⏰ Reminder: <reminder message> <relevant emoji>`
 
 Rules:
 - the first real action should be the CLI command, not a success reply
 - wait up to 2 minutes for the CLI to finish
-- send short "still working" updates while waiting
+- send the setup message immediately when the request is received
+- send at most one slow-progress message after 10 seconds of real waiting
 - only confirm success after the CLI actually succeeds
 - if the CLI fails or times out, say that clearly
 - never combine a success confirmation with a failure/disclaimer in the same turn
 - never simulate the later reminder-delivery message during the creation turn
+- avoid dumping raw JSON into chat unless the user explicitly asked for machine-readable output
 
 ## CLI capabilities
 
