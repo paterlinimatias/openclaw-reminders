@@ -260,8 +260,12 @@ async function runOpenClaw(args, fallbackMessage, options = {}) {
   });
 }
 
-async function listCronJobs() {
-  const result = await runOpenClaw(['cron', 'list', '--json'], 'failed to list OpenClaw cron jobs');
+async function listCronJobs(options = {}) {
+  const result = await runOpenClaw(
+    ['cron', 'list', '--json'],
+    'failed to list OpenClaw cron jobs',
+    { progressMessages: options.progressMessages }
+  );
   const parsed = parseJsonOutput(result.stdout, 'failed to parse OpenClaw cron list output');
   return parsed.jobs || [];
 }
@@ -297,7 +301,7 @@ function matchesContext(job, context) {
 async function getReminderJobs(options = {}) {
   const workspace = getWorkspace(options);
   const context = getCurrentContext(options);
-  const jobs = await listCronJobs();
+  const jobs = await listCronJobs(options);
   return jobs.filter((job) => {
     if (!matchesReminderShape(job, workspace)) return false;
     if (options.all) return true;
@@ -438,7 +442,7 @@ async function uninstall(options) {
       return;
     }
 
-    for (const job of await getReminderJobs({ workspace })) {
+    for (const job of await getReminderJobs({ workspace, progressMessages: false })) {
       await removeCronJob(job.id);
       summary.cron_jobs_removed.push(job.id);
     }
