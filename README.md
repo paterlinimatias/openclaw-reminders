@@ -60,11 +60,13 @@ Avoid dumping raw JSON into chat unless the user explicitly asked for machine-re
 If the reminder CLI is slow, the agent should wait for the result instead of pretending the reminder is already scheduled.
 
 Rules:
+- the first real action should be the CLI command, not a success reply
 - wait up to 2 minutes for the CLI to finish
 - send short "still working" updates while waiting
 - only confirm success after the CLI actually succeeds
 - if the CLI fails or times out, say that clearly
 - never combine a success message with a disclaimer that nothing was scheduled
+- never simulate the later reminder-delivery message during the creation turn
 
 ## CLI capabilities
 

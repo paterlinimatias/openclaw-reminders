@@ -49,22 +49,26 @@ Do not dump raw JSON into the chat unless the user explicitly asks for JSON or s
 Reminder commands may take a while if the OpenClaw cron gateway is slow.
 
 Rules:
+- For reminder create, update, remove, list, and show requests, the first real action should be the CLI command, not a user-visible success reply.
 - Wait up to 2 minutes for the CLI result before giving up.
 - Do not send success wording before the CLI command actually succeeds.
 - Do not say "Done, I’ll remind you..." unless the reminder was really scheduled.
 - If the command is still running, send short progress updates instead of pretending it finished.
 - If the command fails or times out, say that plainly instead of mixing a fake success with a disclaimer.
+- Do not invent or simulate the future reminder delivery message in the creation turn.
+- Never output lines like `⏰ Reminder: ...` or `🪥 Reminder: ...` while creating the reminder. Those are for the later delivery event only.
 
 Suggested progress messages while waiting:
 - "Still working on it, the reminder system is being slow."
 - "Still waiting for the reminder to save, I haven’t forgotten."
 - "Almost there, OpenClaw is taking longer than usual."
 
-Bad pattern, never do this:
+Bad patterns, never do these:
+- "🪥 Reminder: brush your teeth."
 - "Done, I’ll remind you in 5 minutes."
 - "Note: I did not schedule a reminder in this turn..."
 
-Those two messages must never appear together.
+The creation turn must never contain both a success confirmation and a failure/disclaimer.
 
 ## Commands
 
