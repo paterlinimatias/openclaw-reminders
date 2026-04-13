@@ -1,6 +1,6 @@
 {
   "name": "openclaw-reminders",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Cron-native reminder skill installer and CLI for OpenClaw",
   "license": "MIT",
   "type": "module",

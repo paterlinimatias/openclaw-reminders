@@ -63,12 +63,8 @@ Suggested progress messages while waiting:
 - "Still waiting for the reminder to save, I haven’t forgotten."
 - "Almost there, OpenClaw is taking longer than usual."
 
-Bad patterns, never do these:
-- "🪥 Reminder: brush your teeth."
-- "Done, I’ll remind you in 5 minutes."
-- "Note: I did not schedule a reminder in this turn..."
-
-The creation turn must never contain both a success confirmation and a failure/disclaimer.
+Never synthesize a reminder-delivery line during reminder creation.
+Never combine a success confirmation with a failure/disclaimer in the same turn.
 
 ## Commands
 

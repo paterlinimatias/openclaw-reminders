@@ -65,7 +65,7 @@ Rules:
 - send short "still working" updates while waiting
 - only confirm success after the CLI actually succeeds
 - if the CLI fails or times out, say that clearly
-- never combine a success message with a disclaimer that nothing was scheduled
+- never combine a success confirmation with a failure/disclaimer in the same turn
 - never simulate the later reminder-delivery message during the creation turn
 
 ## CLI capabilities
