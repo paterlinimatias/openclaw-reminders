@@ -44,7 +44,7 @@ Keep reminder creation replies tiny and consistent.
 
 Recommended pattern:
 - immediately: `⚙️ Setting up reminder...`
-- if still waiting after 10 seconds: `⏳ Still working on it...`
+- if still waiting after 10 seconds: `👀 Still working on it...`
 - after success: `⏳ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
 - when it later fires: `⏰ Reminder: <reminder message> <relevant emoji>`
 

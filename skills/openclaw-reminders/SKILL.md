@@ -17,7 +17,7 @@ When the instruction is received:
 - `⚙️ Setting up reminder...`
 
 If it is still waiting after 10 seconds:
-- `⏳ Still working on it...`
+- `👀 Still working on it...`
 
 After successful scheduling:
 - `⏳ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
