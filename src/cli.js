@@ -21,6 +21,8 @@ const OPENCLAW_PROGRESS_MESSAGES = [
   [10000, 'Still working on it, OpenClaw is taking its time today...'],
   [20000, 'Still waiting, the cron gateway is moving like it just woke up from a nap.'],
   [30000, 'Hang tight, I’m still listening for cron. This box is thinking very hard.'],
+  [40000, 'Still loading, apparently this cron lookup needed a small character arc.'],
+  [50000, 'Almost a full minute, which is rude, but I’m still here waiting for it.'],
 ];
 
 function parseTime(value) {
@@ -205,13 +207,20 @@ async function runOpenClaw(args, fallbackMessage, options = {}) {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timeoutTimer = null;
     const timers = [];
+
+    const cleanup = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      timeoutTimer = null;
+      for (const timer of timers) clearTimeout(timer);
+      timers.length = 0;
+    };
 
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutTimer);
-      for (const timer of timers) clearTimeout(timer);
+      cleanup();
       fn(value);
     };
 
@@ -239,11 +248,13 @@ async function runOpenClaw(args, fallbackMessage, options = {}) {
     for (const [delay, message] of progressMessages) {
       if (delay >= timeoutMs) continue;
       timers.push(setTimeout(() => {
+        if (settled) return;
         process.stderr.write(`${message}\n`);
       }, delay));
     }
 
-    const timeoutTimer = setTimeout(() => {
+    timeoutTimer = setTimeout(() => {
+      if (settled) return;
       child.kill('SIGTERM');
     }, timeoutMs);
   });
