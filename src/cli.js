@@ -329,26 +329,59 @@ function formatReminderRow(job) {
   };
 }
 
-function formatFriendlyTime(runAt) {
+function pluralize(value, singular) {
+  return `${value} ${singular}${value === 1 ? '' : 's'}`;
+}
+
+function formatDurationFromNow(runAt) {
   if (!runAt) return 'unknown time';
   const date = new Date(runAt);
   if (Number.isNaN(date.getTime())) return runAt;
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffMin = Math.round(diffMs / 60000);
-  if (diffMin >= 0 && diffMin < 60) {
-    if (diffMin <= 1) return 'in 1 minute';
-    return `in ${diffMin} minutes`;
+  const diffMs = date.getTime() - Date.now();
+  const clampedMs = Math.max(0, diffMs);
+  const totalSeconds = Math.ceil(clampedMs / 1000);
+
+  if (totalSeconds < 60) {
+    return `in ${pluralize(Math.max(1, totalSeconds), 'second')}`;
   }
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const targetDay = new Date(date);
-  targetDay.setHours(0, 0, 0, 0);
-  const dayDiff = Math.round((targetDay.getTime() - today.getTime()) / 86400000);
-  const timeText = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
-  if (dayDiff === 0) return `today at ${timeText}`;
-  if (dayDiff === 1) return `tomorrow at ${timeText}`;
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
+
+  const totalMinutes = Math.ceil(clampedMs / 60000);
+  if (totalMinutes < 60) {
+    return `in ${pluralize(totalMinutes, 'minute')}`;
+  }
+
+  if (clampedMs < 86400000) {
+    const hoursFloat = clampedMs / 3600000;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hoursFloat > 1 && hoursFloat < 2 && minutes > 0) {
+      return `in ${pluralize(hours, 'hour')} and ${pluralize(minutes, 'minute')}`;
+    }
+    return `in ${pluralize(Math.ceil(hoursFloat), 'hour')}`;
+  }
+
+  const totalDays = Math.ceil(clampedMs / 86400000);
+  return `in ${pluralize(totalDays, 'day')}`;
+}
+
+function emojiForReminder(text) {
+  const value = String(text || '').toLowerCase();
+  const rules = [
+    [/\b(kiss|wife|girlfriend|boyfriend|partner|love|romantic|date)\b/, '💋'],
+    [/\b(tooth|teeth|brush|dentist|floss)\b/, '🪥'],
+    [/\b(sleep|bed|nap)\b/, '😴'],
+    [/\b(call|phone|ring)\b/, '📞'],
+    [/\b(meeting|calendar|appointment)\b/, '📅'],
+    [/\b(pay|bill|invoice|rent)\b/, '💸'],
+    [/\b(med|medicine|medication|pill)\b/, '💊'],
+    [/\b(eat|lunch|dinner|breakfast|meal)\b/, '🍽️'],
+    [/\b(water|drink)\b/, '💧'],
+    [/\b(workout|gym|run|exercise|walk)\b/, '💪'],
+  ];
+  for (const [pattern, emoji] of rules) {
+    if (pattern.test(value)) return emoji;
+  }
+  return '⏰';
 }
 
 function truncate(text, max = 48) {
@@ -366,10 +399,11 @@ function printReminderList(rows, options = {}) {
     console.log(options.all ? 'No reminders scheduled.' : 'No reminders scheduled for this chat.');
     return;
   }
+  console.log('These are your upcoming reminders ⏰:');
   for (const row of rows) {
-    const when = formatFriendlyTime(row.run_at);
-    const exact = row.run_at ? ` (${row.run_at})` : '';
-    console.log(`${row.id}  ${truncate(row.text)}  ${when}${exact}`);
+    const when = formatDurationFromNow(row.run_at);
+    const emoji = emojiForReminder(row.text);
+    console.log(`${emoji} ${truncate(row.text)} ${when}`);
   }
 }
 
@@ -500,7 +534,7 @@ async function showReminder(options) {
   }
   console.log(`ID: ${row.id}`);
   console.log(`Text: ${row.text}`);
-  console.log(`When: ${formatFriendlyTime(row.run_at)}${row.run_at ? ` (${row.run_at})` : ''}`);
+  console.log(`When: ${formatDurationFromNow(row.run_at)}${row.run_at ? ` (${row.run_at})` : ''}`);
   if (row.channel || row.account || row.to) {
     console.log(`Route: ${row.channel || '-'} / ${row.account || '-'} / ${row.to || '-'}`);
   }

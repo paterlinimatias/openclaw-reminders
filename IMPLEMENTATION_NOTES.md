@@ -1,12 +1,14 @@
 # openclaw-reminders - next improvement spec
 
 ## Goal
-Make reminder listing and management safer, faster, and easier for both humans and agents.
+Make reminder listing, delivery, and follow-through safer, faster, and easier for both humans and agents.
 
 ## Problems to solve
 1. `list` can hang too long when `openclaw cron list --json` is slow.
 2. Default listing scope is too broad and can surface reminders from other agent accounts/chats.
 3. Output is too raw for humans and not clearly split between human vs machine modes.
+4. Human list output still exposes internal ids and sometimes uses less useful absolute times.
+5. Fired reminders do not yet clearly distinguish user-directed reminders from agent-directed reminders.
 
 ## Requirements
 
@@ -60,16 +62,16 @@ Support two clear output modes:
 
 #### Default: pretty human output
 `list` should render friendly text with:
-- id
+- a leading calendar emoji
 - reminder text
-- human-readable scheduled time
-- optional exact scheduled time when useful
+- human-readable scheduled time relative to now when possible
+- no internal id by default
 - delivery target only when relevant
 
 Examples:
-- `in 2 minutes`
-- `today at 4:30 PM`
-- `tomorrow at 9:00 AM`
+- `📅 Go to sleep, in 2 minutes`
+- `📅 Kiss my wife, in 3 hours`
+- `📅 Dentist appointment, tomorrow at 9:00 AM`
 
 Empty state:
 - `No reminders scheduled for this chat.`
@@ -94,11 +96,33 @@ Possible future extension, not required now:
 - `--account <account>`
 - `--to <destination>`
 
+## Reminder delivery semantics
+
+### User-directed reminders
+If the reminder is for the user, the fired message should tell the user what they need to do.
+
+Examples:
+- `⏰ Reminder: Go to sleep 😴`
+- `⏰ Reminder: Kiss your wife 💋`
+
+### Agent-directed reminders
+If the reminder is for the agent, the fired message should make the agent action explicit, and the agent should follow through when the reminder fires.
+
+Examples:
+- `⏰ Reminder: I need to check the deploy status 🚀`
+- `⏰ Reminder: I need to review the inbox 📬`
+
+Open question to resolve in implementation:
+- how to mark a reminder as agent-directed vs user-directed without brittle guessing
+- likely options are explicit metadata, explicit phrasing rules, or a future CLI flag
+
 ## Tests to add
 - `list` filters to current context by default
 - `list --all` returns reminder jobs across contexts
 - timeout in `openclaw cron list --json` returns a clear timeout error
 - pretty output is sorted and stable
+- pretty output omits ids by default
+- pretty output uses relative time from now when possible
 - `--json` preserves structured fields
 - empty state message is friendly
 

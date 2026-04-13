@@ -20,10 +20,14 @@ If it is still waiting after 10 seconds:
 - `👀 Still working on it...`
 
 After successful scheduling:
-- `⏳ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
+- `⏰ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
 
 When the reminder actually fires later:
 - `⏰ Reminder: <reminder message> <relevant emoji>`
+
+For reminder lists:
+- header: `These are your upcoming reminders ⏰:`
+- rows: `<relevant emoji> <reminder> <relative time>`
 
 ## Rules
 
@@ -107,4 +111,10 @@ openclaw-reminders remove --id <cron-job-id>
 - Relative reminder times may use seconds, minutes, hours, or days.
 - If the user asks for sub-minute timing, honor it instead of rounding up.
 - Use exact timestamps when needed so reminders can fire at second-level precision.
-- When listing reminders to the user, prefer friendly human output such as `in 23 seconds`, `in 2 minutes`, `today at 4:30 PM`, or `tomorrow at 9:00 AM` instead of raw ISO timestamps unless the user asked for exact timestamps.
+- When listing reminders to the user, prefer friendly human output such as `in 23 seconds`, `in 14 minutes`, `in 1 hour and 12 minutes`, `in 3 hours`, or `in 2 days` instead of raw ISO timestamps unless the user asked for exact timestamps.
+- Relative time style for chat:
+  - under 1 minute: seconds
+  - under 1 hour: minutes
+  - over 1 hour and under 2 hours: hours and minutes
+  - 2 hours up to 24 hours: hours only
+  - 24 hours or more: days from now

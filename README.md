@@ -45,8 +45,19 @@ Keep reminder creation replies tiny and consistent.
 Recommended pattern:
 - immediately: `⚙️ Setting up reminder...`
 - if still waiting after 10 seconds: `👀 Still working on it...`
-- after success: `⏳ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
+- after success: `⏰ Reminder set to <reminder> in <how long from now> <relevant emoji>.`
 - when it later fires: `⏰ Reminder: <reminder message> <relevant emoji>`
+
+Recommended list pattern:
+- header: `These are your upcoming reminders ⏰:`
+- rows: `<relevant emoji> <reminder> <relative time>`
+
+Relative time rules:
+- under 1 minute: seconds
+- under 1 hour: minutes
+- over 1 hour and under 2 hours: hours and minutes
+- 2 hours up to 24 hours: hours only
+- 24 hours or more: days from now
 
 Rules:
 - the first real action should be the CLI command, not a success reply
