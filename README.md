@@ -71,6 +71,7 @@ Rules:
 - never combine a success confirmation with a failure/disclaimer in the same turn
 - never simulate the later reminder-delivery message during the creation turn
 - avoid dumping raw JSON into chat unless the user explicitly asked for machine-readable output
+- by default, CLI cron lookups should fail fast in about 15 seconds with a clear timeout error instead of hanging for a minute
 
 ## CLI capabilities
 
@@ -79,6 +80,8 @@ Rules:
 - identifies reminder jobs with a structured `reminder:<slug>:<timestamp>` name prefix
 - lists reminders in the current chat/account by default, with `--all` to widen scope
 - supports human-friendly output by default and `--json` for agents/automation
+- scopes reminder discovery to the current delivery context by default, with `--all` for cross-context views
+- fails fast when OpenClaw cron is slow, instead of hanging indefinitely
 - shows, updates, and removes reminder cron jobs
 
 ## Commands

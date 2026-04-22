@@ -7,6 +7,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+- Lower the default OpenClaw cron timeout to 15 seconds so reminder discovery fails fast instead of hanging for up to a minute.
+- Limit reminder CLI slow-progress output to a single 10-second message, matching the chat UX contract.
+- Tighten relative time formatting so reminders between 1 and 2 hours show `hours and minutes`, while longer same-day reminders show rounded hours only.
+
+### Fixed
+- Keep README and bundled skill guidance aligned with the current timeout and listing behavior.
+
 ## [1.0.0] - TBD
 
 ### Added

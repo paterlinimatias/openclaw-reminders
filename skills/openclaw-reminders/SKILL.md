@@ -35,6 +35,7 @@ For reminder lists:
 - Send that setup message immediately after reminder intent is recognized, before any CLI or cron call starts.
 - The first tool action must then be the CLI command, not a success reply.
 - Wait up to 2 minutes for the CLI result before giving up.
+- Expect the CLI itself to fail fast for cron lookups in about 15 seconds if OpenClaw is slow or unavailable.
 - Send the setup message immediately when the reminder request is received.
 - Send at most one slow-progress message, after 10 seconds of real waiting.
 - Only send the success message after the CLI command actually succeeds.

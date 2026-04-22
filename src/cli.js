@@ -16,13 +16,9 @@ const PACKAGE_ROOT = resolve(CURRENT_DIR, '..');
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, 'skills', 'openclaw-reminders');
 const REMINDER_NAME_PREFIX = 'reminder:';
 const REMINDER_DESCRIPTION_PREFIX = 'Managed by openclaw-reminders';
-const OPENCLAW_TIMEOUT_MS = Number(process.env.OPENCLAW_REMINDERS_TIMEOUT_MS || 60000);
+const OPENCLAW_TIMEOUT_MS = Number(process.env.OPENCLAW_REMINDERS_TIMEOUT_MS || 15000);
 const OPENCLAW_PROGRESS_MESSAGES = [
   [10000, 'Still working on it, OpenClaw is taking its time today...'],
-  [20000, 'Still waiting, the cron gateway is moving like it just woke up from a nap.'],
-  [30000, 'Hang tight, I’m still listening for cron. This box is thinking very hard.'],
-  [40000, 'Still loading, apparently this cron lookup needed a small character arc.'],
-  [50000, 'Almost a full minute, which is rude, but I’m still here waiting for it.'],
 ];
 
 function parseTime(value) {
@@ -350,14 +346,18 @@ function formatDurationFromNow(runAt) {
     return `in ${pluralize(totalMinutes, 'minute')}`;
   }
 
-  if (clampedMs < 86400000) {
-    const hoursFloat = clampedMs / 3600000;
+  if (clampedMs < 7200000) {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    if (hoursFloat > 1 && hoursFloat < 2 && minutes > 0) {
-      return `in ${pluralize(hours, 'hour')} and ${pluralize(minutes, 'minute')}`;
+    if (minutes > 0) {
+      return `in ${pluralize(Math.max(1, hours), 'hour')} and ${pluralize(minutes, 'minute')}`;
     }
-    return `in ${pluralize(Math.ceil(hoursFloat), 'hour')}`;
+    return `in ${pluralize(Math.max(1, hours), 'hour')}`;
+  }
+
+  if (clampedMs < 86400000) {
+    const totalHours = Math.ceil(clampedMs / 3600000);
+    return `in ${pluralize(totalHours, 'hour')}`;
   }
 
   const totalDays = Math.ceil(clampedMs / 86400000);
